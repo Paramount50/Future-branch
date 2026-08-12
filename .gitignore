@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+incident_report.html
+.pytest_cache/
+.demo-repo/
