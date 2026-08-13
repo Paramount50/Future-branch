@@ -2,6 +2,13 @@
 
 from dataclasses import dataclass
 
+class MockApp:
+    def get(self, *args, **kwargs):
+        return lambda f: f
+
+app = MockApp()
+
+
 
 @dataclass
 class UserResponse:
