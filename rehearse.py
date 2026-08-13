@@ -77,11 +77,28 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         result = {"status": "error", "base": args.base, "branches": args.branches, "conflicts": [], "error": str(exc)}
     write_report(result, report_path)
-    print(f"Future Branch: {result['status']} ({len(result.get('conflicts', []))} conflict(s))")
-    print(f"Incident report: {report_path}")
+    status = result.get("status", "error")
+    num_conflicts = len(result.get("conflicts", []))
+    
+    # ANSI escape codes for coloring
+    RED = "\033[91m"
+    GREEN = "\033[92m"
+    YELLOW = "\033[93m"
+    BOLD = "\033[1m"
+    RESET = "\033[0m"
+
+    if status == "clean":
+        status_str = f"{GREEN}{BOLD}CLEAN{RESET}"
+    elif status == "conflicts":
+        status_str = f"{RED}{BOLD}CONFLICT DETECTED ({num_conflicts} conflict(s)){RESET}"
+    else:
+        status_str = f"{RED}{BOLD}ERROR{RESET}"
+
+    print(f"Future Branch: {status_str}")
+    print(f"Incident report: {YELLOW}{report_path}{RESET}")
     if result.get("error"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-    return 0 if result.get("status") == "clean" else 1
+        print(f"{RED}Error: {result['error']}{RESET}", file=sys.stderr)
+    return 0 if status == "clean" else 1
 
 
 if __name__ == "__main__":

@@ -326,6 +326,74 @@ h1 {
   overflow-x: auto;
 }
 
+/* Root Cause */
+.root-cause {
+  background: #050505;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.root-cause-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: 8px;
+}
+
+.root-cause-text {
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.root-cause-text strong {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+/* Evidence Trace */
+.evidence {
+  background: #050505;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 18px;
+  margin-bottom: 12px;
+}
+
+.evidence-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.evidence ul {
+  list-style: none;
+  padding: 0;
+}
+
+.evidence li {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 3px 0;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.evidence li:last-child {
+  border-bottom: none;
+}
+
+.evidence li::before {
+  content: '› ';
+  color: var(--text-dim);
+}
+
 /* Action Box */
 .action-box {
   background: #050505;
@@ -386,11 +454,28 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
 
     cards: list[str] = []
     for item in conflicts:
-        evidence = "".join(f"<li>{html.escape(str(x))}</li>" for x in item.get("evidence", []))
+        evidence_items = item.get("evidence", [])
+        evidence_html = "".join(f"<li>{html.escape(str(x))}</li>" for x in evidence_items)
         owners = " ".join(
             f"<span class='terminal-tab active'>{html.escape(str(x))}</span>"
             for x in item.get("branches", [])
         )
+
+        # Deterministic root cause from analyzer data
+        owner_changed = item.get("owner_changed", "")
+        owner_consumer = item.get("owner_consumer", "")
+        description = item.get("description", "Contract conflict detected.")
+        root_cause = f"{description} Branch <strong>{html.escape(owner_changed)}</strong> modified the contract, but branch <strong>{html.escape(owner_consumer)}</strong> still depends on the original."
+
+        branch_a_label = html.escape(owner_changed) if owner_changed else "Branch A"
+        branch_b_label = html.escape(owner_consumer) if owner_consumer else "Branch B"
+
+        evidence_section = f"""
+          <div class="evidence">
+            <div class="evidence-label">Evidence Trace</div>
+            <ul>{evidence_html}</ul>
+          </div>
+        """ if evidence_items else ""
 
         cards.append(f"""
         <div class="incident-block">
@@ -406,7 +491,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
             <div class="diff-box changed">
               <div class="diff-box-head">
                 <span>Changed contract</span>
-                <span>Branch A</span>
+                <span>{branch_a_label}</span>
               </div>
               <pre class="diff-code">{html.escape(str(item.get('changed_code', 'No code excerpt.')))}</pre>
             </div>
@@ -414,14 +499,21 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
             <div class="diff-box expected">
               <div class="diff-box-head">
                 <span>Expected by consumer</span>
-                <span>Branch B</span>
+                <span>{branch_b_label}</span>
               </div>
               <pre class="diff-code">{html.escape(str(item.get('expected_code', 'No code excerpt.')))}</pre>
             </div>
           </div>
 
+          <div class="root-cause">
+            <div class="root-cause-label">Root Cause</div>
+            <div class="root-cause-text">{root_cause}</div>
+          </div>
+
+          {evidence_section}
+
           <div class="action-box">
-            <div class="action-label">&gt; Suggested Intervention (ao send)</div>
+            <div class="action-label">&gt; Recommended Intervention (ao send)</div>
             <div class="action-desc">{html.escape(str(item.get('suggested_fix', 'Resolve the contract mismatch.')))}</div>
           </div>
         </div>
