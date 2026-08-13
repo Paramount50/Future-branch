@@ -4,6 +4,6 @@ export async function loadProfile() {
 }
 
 export async function billingLabel() {
-  const response = await loadProfile();
-  return `Credits remaining: ${response.credits}`;
+  const profile = await loadProfile();
+  return `Credits remaining: ${profile.credits}`;
 }
