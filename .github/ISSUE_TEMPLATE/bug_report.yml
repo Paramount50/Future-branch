@@ -1,0 +1,44 @@
+name: Bug Report
+description: File a bug report to help us improve Future Branch
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Exact steps or CLI command to reproduce the behavior.
+      placeholder: |
+        1. Run `future-branch /path/to/repo branch-a branch-b`
+        2. Expected output ...
+        3. Observed output ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please provide details about your environment.
+      value: |
+        - OS: [e.g. Windows 11 / macOS 14 / Ubuntu 24.04]
+        - Python version: [e.g. 3.11.8]
+        - Git version: [e.g. 2.43.0]
+        - future-branch version: [e.g. 0.1.0]
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any other context, logs, or screenshots about the problem here.

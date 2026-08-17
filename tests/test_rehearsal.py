@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from git import Repo
+
 from rehearse import rehearse_merges
 
 

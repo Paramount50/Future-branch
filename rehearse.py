@@ -1,7 +1,9 @@
 """Command-line entry point for rehearsing a multi-branch Git integration."""
+
 from __future__ import annotations
 
 import argparse
+import contextlib
 import gc
 import sys
 import tempfile
@@ -35,15 +37,27 @@ def rehearse_merges(repo_path: Path, base: str, branches: list[str]) -> list[Con
                     clone.git.merge(branch, "--no-edit", "--no-ff")
                 except GitCommandError as exc:
                     output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
-                    paths = sorted({line.split(":", 1)[-1].strip() for line in output.splitlines() if line.startswith("CONFLICT")})
+                    paths = sorted(
+                        {line.split(":", 1)[-1].strip() for line in output.splitlines() if line.startswith("CONFLICT")}
+                    )
                     if not paths:
                         paths = ["(merge state)"]
                     for path in paths:
-                        conflicts.append(ConflictResult(path, list(dict.fromkeys([*branches, branch])), "Git could not merge overlapping changes.", "Resolve the merge markers between the named branches, then rerun the rehearsal.", kind="merge", severity="error", owner_changed=branch, owner_consumer=branches[0], evidence=[output.strip()]))
-                    try:
+                        conflicts.append(
+                            ConflictResult(
+                                path,
+                                list(dict.fromkeys([*branches, branch])),
+                                "Git could not merge overlapping changes.",
+                                "Resolve the merge markers between the named branches, then rerun the rehearsal.",
+                                kind="merge",
+                                severity="error",
+                                owner_changed=branch,
+                                owner_consumer=branches[0],
+                                evidence=[output.strip()],
+                            )
+                        )
+                    with contextlib.suppress(GitCommandError):
                         clone.git.merge(abort=True)
-                    except GitCommandError:
-                        pass
                     break
             return conflicts
         finally:
@@ -59,7 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("repo", help="path to the Git repository")
     parser.add_argument("branches", nargs="+", help="two or more branch names, merged in this order")
     parser.add_argument("--base", default="main", help="base branch (default: main)")
-    parser.add_argument("--report", default="incident_report.html", help="HTML report path (default: incident_report.html)")
+    parser.add_argument(
+        "--report", default="incident_report.html", help="HTML report path (default: incident_report.html)"
+    )
     return parser
 
 
@@ -79,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     write_report(result, report_path)
     status = result.get("status", "error")
     num_conflicts = len(result.get("conflicts", []))
-    
+
     # ANSI escape codes for coloring
     RED = "\033[91m"
     GREEN = "\033[92m"

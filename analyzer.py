@@ -1,11 +1,13 @@
 """Pure-Python contract analysis for Future Branch rehearsals."""
+
 from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from git import Repo
 
@@ -82,9 +84,15 @@ def _python_contracts(source: str) -> dict[str, set[str] | str]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for dec in node.decorator_list:
-                if isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute) and dec.args and isinstance(dec.args[0], ast.Constant):
-                    if dec.func.attr in {"get", "post", "put", "patch", "delete"} and isinstance(dec.args[0].value, str):
-                        routes.add(f"{dec.func.attr.upper()} {dec.args[0].value}")
+                if (
+                    isinstance(dec, ast.Call)
+                    and isinstance(dec.func, ast.Attribute)
+                    and dec.args
+                    and isinstance(dec.args[0], ast.Constant)
+                    and dec.func.attr in {"get", "post", "put", "patch", "delete"}
+                    and isinstance(dec.args[0].value, str)
+                ):
+                    routes.add(f"{dec.func.attr.upper()} {dec.args[0].value}")
     result["routes"] = routes
     return result
 
@@ -118,7 +126,15 @@ class BranchAnalyzer:
         return self.repo.commit(ref)
 
     def textual_conflict(self, path: str, branches: list[str], details: str = "") -> ConflictResult:
-        return ConflictResult(path, branches, "Git could not merge overlapping changes.", "Resolve the conflict, then rerun the rehearsal.", kind="merge", severity="error", evidence=[details] if details else [])
+        return ConflictResult(
+            path,
+            branches,
+            "Git could not merge overlapping changes.",
+            "Resolve the conflict, then rerun the rehearsal.",
+            kind="merge",
+            severity="error",
+            evidence=[details] if details else [],
+        )
 
     def semantic_conflicts(self, base_ref: str, branches: list[str]) -> list[ConflictResult]:
         base = self._commit(base_ref)
@@ -154,7 +170,22 @@ class BranchAnalyzer:
                         stale = sorted(removed & used)
                         if stale:
                             field_name = stale[0]
-                            results.append(ConflictResult(consumer_path, [changed_name, consumer_name], f"Backend contract removed '{field_name}', but the frontend still reads response.{field_name}.", f"Have {consumer_name} consume the renamed field, or preserve '{field_name}' as a compatibility alias in {changed_name}.", changed_code=f"{field_name} -> {sorted(new_fields)}", expected_code=f"response.{field_name}", owner_changed=changed_name, owner_consumer=consumer_name, evidence=[f"{path}: fields changed from {sorted(old_fields)} to {sorted(new_fields)}", f"{consumer_path}: response.{field_name}"]))
+                            results.append(
+                                ConflictResult(
+                                    consumer_path,
+                                    [changed_name, consumer_name],
+                                    f"Backend contract removed '{field_name}', but the frontend still reads response.{field_name}.",
+                                    f"Have {consumer_name} consume the renamed field, or preserve '{field_name}' as a compatibility alias in {changed_name}.",
+                                    changed_code=f"{field_name} -> {sorted(new_fields)}",
+                                    expected_code=f"response.{field_name}",
+                                    owner_changed=changed_name,
+                                    owner_consumer=consumer_name,
+                                    evidence=[
+                                        f"{path}: fields changed from {sorted(old_fields)} to {sorted(new_fields)}",
+                                        f"{consumer_path}: response.{field_name}",
+                                    ],
+                                )
+                            )
         for name_a, files_a in python_by_branch.items():
             for name_b, files_b in python_by_branch.items():
                 if name_a >= name_b:
@@ -163,7 +194,19 @@ class BranchAnalyzer:
                     ca, cb = files_a[path], files_b[path]
                     for symbol in set(ca) & set(cb):
                         if isinstance(ca[symbol], str) and ca[symbol] != cb[symbol]:
-                            results.append(ConflictResult(path, [name_a, name_b], f"Both branches changed the Python contract {symbol} incompatibly.", "Coordinate one signature and update every caller before merging.", changed_code=str(ca[symbol]), expected_code=str(cb[symbol]), owner_changed=name_a, owner_consumer=name_b, evidence=[f"{name_a}: {ca[symbol]}", f"{name_b}: {cb[symbol]}"]))
+                            results.append(
+                                ConflictResult(
+                                    path,
+                                    [name_a, name_b],
+                                    f"Both branches changed the Python contract {symbol} incompatibly.",
+                                    "Coordinate one signature and update every caller before merging.",
+                                    changed_code=str(ca[symbol]),
+                                    expected_code=str(cb[symbol]),
+                                    owner_changed=name_a,
+                                    owner_consumer=name_b,
+                                    evidence=[f"{name_a}: {ca[symbol]}", f"{name_b}: {cb[symbol]}"],
+                                )
+                            )
         return results
 
     def analyze(self, base: str, branches: list[str], merge_conflicts: Iterable[ConflictResult] = ()) -> dict[str, Any]:
@@ -172,10 +215,17 @@ class BranchAnalyzer:
             for branch in branches:
                 self._commit(branch)
             conflicts = list(merge_conflicts) + self.semantic_conflicts(base, branches)
-            return {"status": "conflicts" if conflicts else "clean", "base": base, "branches": branches, "conflicts": [x.to_dict() for x in conflicts]}
+            return {
+                "status": "conflicts" if conflicts else "clean",
+                "base": base,
+                "branches": branches,
+                "conflicts": [x.to_dict() for x in conflicts],
+            }
         except Exception as exc:
             return {"status": "error", "base": base, "branches": branches, "conflicts": [], "error": str(exc)}
 
 
-def analyze_repository(repo_path: str | Path, base: str, branches: list[str], merge_conflicts: Iterable[ConflictResult] = ()) -> dict[str, Any]:
+def analyze_repository(
+    repo_path: str | Path, base: str, branches: list[str], merge_conflicts: Iterable[ConflictResult] = ()
+) -> dict[str, Any]:
     return BranchAnalyzer(repo_path).analyze(base, branches, merge_conflicts)

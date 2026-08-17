@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import gc
-import pytest
 from pathlib import Path
+
+import pytest
 from git import Repo
 
 
@@ -19,22 +20,22 @@ def demo_repo(tmp_path: Path) -> Path:
     # Base state
     app_py = backend_dir / "app.py"
     app_py.write_text(
-        'from dataclasses import dataclass\n\n'
-        '@dataclass\n'
-        'class UserResponse:\n'
-        '    username: str\n'
-        '    credits: int\n\n'
-        'def get_profile() -> UserResponse:\n'
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class UserResponse:\n"
+        "    username: str\n"
+        "    credits: int\n\n"
+        "def get_profile() -> UserResponse:\n"
         '    return UserResponse(username="ada", credits=42)\n',
         encoding="utf-8",
     )
 
     api_js = frontend_dir / "api.js"
     api_js.write_text(
-        'export async function loadProfile() {\n'
+        "export async function loadProfile() {\n"
         '  const response = await fetch("/api/profile");\n'
-        '  return response.json();\n'
-        '}\n',
+        "  return response.json();\n"
+        "}\n",
         encoding="utf-8",
     )
 
@@ -48,12 +49,12 @@ def demo_repo(tmp_path: Path) -> Path:
     # Agent A: Backend renames credits -> creditsbalance
     repo.git.checkout("-b", "agent-a-backend")
     app_py.write_text(
-        'from dataclasses import dataclass\n\n'
-        '@dataclass\n'
-        'class UserResponse:\n'
-        '    username: str\n'
-        '    creditsbalance: int\n\n'
-        'def get_profile() -> UserResponse:\n'
+        "from dataclasses import dataclass\n\n"
+        "@dataclass\n"
+        "class UserResponse:\n"
+        "    username: str\n"
+        "    creditsbalance: int\n\n"
+        "def get_profile() -> UserResponse:\n"
         '    return UserResponse(username="ada", creditsbalance=42)\n',
         encoding="utf-8",
     )
@@ -64,13 +65,13 @@ def demo_repo(tmp_path: Path) -> Path:
     repo.git.checkout("main")
     repo.git.checkout("-b", "agent-b-frontend")
     api_js.write_text(
-        'export async function loadProfile() {\n'
+        "export async function loadProfile() {\n"
         '  const response = await fetch("/api/profile");\n'
-        '  return response.json();\n'
-        '}\n\n'
-        'export function showBilling(profile) {\n'
-        '  return `Billing credits: ${profile.credits}`;\n'
-        '}\n',
+        "  return response.json();\n"
+        "}\n\n"
+        "export function showBilling(profile) {\n"
+        "  return `Billing credits: ${profile.credits}`;\n"
+        "}\n",
         encoding="utf-8",
     )
     repo.git.add(str(api_js))
@@ -93,8 +94,7 @@ def clean_repo(tmp_path: Path) -> Path:
 
     app_py = backend_dir / "app.py"
     app_py.write_text(
-        'def greet(name: str) -> str:\n'
-        '    return f"Hello {name}"\n',
+        'def greet(name: str) -> str:\n    return f"Hello {name}"\n',
         encoding="utf-8",
     )
 
@@ -108,7 +108,7 @@ def clean_repo(tmp_path: Path) -> Path:
     # Branch A: Adds helper
     repo.git.checkout("-b", "feature-a")
     helper_py = backend_dir / "helper.py"
-    helper_py.write_text('def helper() -> int:\n    return 1\n', encoding="utf-8")
+    helper_py.write_text("def helper() -> int:\n    return 1\n", encoding="utf-8")
     repo.git.add(str(helper_py))
     repo.index.commit("feature-a: add helper")
 
@@ -116,7 +116,7 @@ def clean_repo(tmp_path: Path) -> Path:
     repo.git.checkout("main")
     repo.git.checkout("-b", "feature-b")
     utils_py = backend_dir / "utils.py"
-    utils_py.write_text('def util() -> int:\n    return 2\n', encoding="utf-8")
+    utils_py.write_text("def util() -> int:\n    return 2\n", encoding="utf-8")
     repo.git.add(str(utils_py))
     repo.index.commit("feature-b: add util")
 

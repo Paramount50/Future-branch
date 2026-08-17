@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from reporter import render_report, write_report
 
 

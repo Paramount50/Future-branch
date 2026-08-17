@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from analyzer import (
-    BranchAnalyzer,
     ConflictResult,
-    _all_fields,
     _js_contracts,
     _python_contracts,
     analyze_repository,
