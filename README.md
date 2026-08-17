@@ -1,94 +1,162 @@
 # Future Branch
 
-> Individually correct. **Collectively broken.** Future Branch catches it before merge.
+<p align="center">
+  <a href="https://github.com/Paramount50/Future-branch/actions/workflows/ci.yml"><img src="https://github.com/Paramount50/Future-branch/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" alt="Python 3.10-3.13"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+</p>
 
-Future Branch is a pre-merge rehearsal gate for parallel coding-agent branches. It merges branches in an isolated, disposable clone and runs offline static analysis to catch contract mismatches that Git cannot see — before anything touches your real `main` branch.
+> **Individually correct. Collectively broken.** Future Branch catches it before merge.
 
-Two agents. One renames a field. The other reads it. Both changes compile. The application breaks silently when they merge. Future Branch prevents this.
+**Future Branch** is a deterministic, offline pre-merge rehearsal gate for parallel coding branches. It merges branches inside an isolated, disposable Git clone and performs multi-language static contract analysis to catch schema mismatches that Git textual merges cannot see — before anything reaches `main`.
 
-## What it does
+---
 
-- **Clones** the repository into a temporary environment.
-- **Merges** each agent branch sequentially into a disposable `future-main`.
-- **Detects** Git merge conflicts and semantic contract mismatches across Python and JavaScript/TypeScript.
-- **Generates** a self-contained HTML incident report with root cause analysis, evidence trace, and a recommended intervention.
-- **Returns** exit code `0` (clean) or `1` (conflicts found) for scripting and CI integration.
+## The Problem
 
-No LLM. No build pipeline. No network dependency. Pure Git operations and static analysis.
+When multiple coding agents or developers work on separate branches simultaneously:
+1. **Branch A (Backend)** renames a response field: `credits` &rarr; `creditsbalance`.
+2. **Branch B (Frontend)** reads `profile.credits` from the API response.
+3. Both branches pass their respective local tests.
+4. Git executes a clean merge without any textual conflicts.
+5. **Production breaks silently at runtime.**
 
-## Install and run
+Future Branch rehearses the merge ahead of time and surfaces cross-branch contract incompatibilities deterministically.
 
-Python 3.10+ and Git are required.
+---
+
+## Features
+
+- 🛡️ **Isolated Git Rehearsal:** Executes sequential test merges in a temporary clone without touching your working tree or source branches.
+- 🔍 **Static Contract Analysis:** Uses Python AST traversal and JS/TS pattern matching to detect function signature drifts, removed schema fields, and broken route endpoints.
+- 📊 **Self-Contained Dark HTML Report:** Generates an incident report with side-by-side contract diffs, evidence traces, and actionable interventions.
+- ⚡ **Zero External Heavy Dependencies:** Pure Python + Git operations. No LLM APIs, no build pipelines, no runtime execution of untrusted code.
+- 🚦 **CI/CD Ready:** Returns exit code `0` on clean rehearsals and `1` on conflicts for seamless integration into CI gates.
+
+---
+
+## Installation
+
+Future Branch requires **Python 3.10+** and **Git**.
 
 ```bash
-python -m pip install -r requirements.txt
-python rehearse.py /path/to/repo branch-a branch-b [branch-c ...]
+# Clone the repository
+git clone https://github.com/Paramount50/Future-branch.git
+cd Future-branch
+
+# Install in editable mode
+pip install -e .
+
+# Or install with development dependencies (pytest, ruff, pre-commit)
+pip install -e .[dev]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--base` | `main` | Base branch to rehearse against |
-| `--report` | `incident_report.html` | Output path for the HTML report |
+---
 
-The first positional argument is the repository path, followed by two or more branch names. The temporary `future-main` is created and removed inside a disposable clone, so the source checkout is left untouched.
-
-## Demo
-
-Run the included demo to see Future Branch in action:
+## Usage
 
 ```bash
-# Linux / macOS
+future-branch <path-to-repo> <branch-1> <branch-2> [branch-3 ...] [options]
+```
+
+### Options
+
+| Flag | Default | Description |
+|:---|:---|:---|
+| `<repo>` | *(required)* | Path to the local Git repository |
+| `<branches...>` | *(required)* | Two or more branch names to merge sequentially |
+| `--base` | `main` | Base branch to rehearse against |
+| `--report` | `incident_report.html` | Path where the HTML incident report will be generated |
+
+### Example
+
+```bash
+future-branch ./my-repo agent-backend-refactor agent-frontend-widget --base main --report reports/incident.html
+```
+
+---
+
+## Interactive Demo
+
+To test Future Branch against a simulated cross-branch contract mismatch:
+
+```bash
+# On Linux / macOS
 bash setup_demo.sh
 
-# Windows
+# On Windows PowerShell
 powershell -ExecutionPolicy Bypass -File .\setup_demo.ps1
 ```
 
-The script creates a temporary repository with three branches:
+The script initializes a temporary repository demonstrating:
+- `main`: Baseline API returning `credits`.
+- `agent-a-backend`: Renames `credits` &rarr; `creditsbalance`.
+- `agent-b-frontend`: Displays `profile.credits`.
 
-| Branch | What it does |
-|--------|-------------|
-| `main` | Base with a `credits` field in the backend API |
-| `agent-a-backend` | Renames `credits` → `creditsbalance` |
-| `agent-b-frontend` | Reads `profile.credits` from the API response |
-
-Then run the generated rehearsal command:
-
+Run the generated command:
 ```bash
-python rehearse.py "<temp-repo-path>" agent-a-backend agent-b-frontend
+future-branch "<temp-repo-path>" agent-a-backend agent-b-frontend
 ```
 
-Future Branch detects that the backend removed the `credits` field while the frontend still depends on it, and generates an incident report with the exact root cause and suggested fix.
+Future Branch will catch the silent break, return exit code `1`, and output `incident_report.html`.
 
-## Architecture
+---
 
-| File | Role |
-|------|------|
-| `rehearse.py` | CLI entry point — clones, merges, orchestrates analysis |
-| `analyzer.py` | Static contract extraction using Python `ast` and regex for JS/TS |
-| `reporter.py` | Generates a self-contained dark-themed HTML incident report |
+## Package Architecture
 
-The analyzer extracts:
-- Python: function signatures, class fields, response keys, FastAPI routes
-- JS/TS: exports, imports, fetch calls, consumed response properties
-
-Cross-language contract mismatches (e.g., a Python backend field rename breaking a JS frontend consumer) are detected by comparing the base branch contracts against each agent branch.
-
-## Built with Agent Orchestrator
-
-Future Branch was built during **The Orchestra**, AO's first hackathon (August 12–13, 2026).
-
-The entire project — planning, implementation, styling, and testing — was done using [Agent Orchestrator](https://aoagents.dev/) as the development workspace. AO agents helped write the static analysis engine, design the incident report, and verify the end-to-end demo flow.
-
-Future Branch is currently **CLI-first**. CI integration is the next step, because the tool needs to discover multiple active agent branches — not just react to a single pull request.
-
-## AO integration
-
-AO can provide the active agent branches and notify owners after a rehearsal:
-
-```bash
-ao session ls
-ao send --session <session-id> --message "Future Branch found a contract conflict in ..."
+```
+Future-branch/
+├── .github/
+│   ├── ISSUE_TEMPLATE/     # Bug and feature request templates
+│   ├── workflows/ci.yml    # Multi-Python GitHub Actions CI
+│   └── pull_request_template.md
+├── docs/
+│   └── architecture.md     # In-depth system design & extension guide
+├── src/
+│   └── future_branch/
+│       ├── __init__.py     # Package metadata
+│       ├── __main__.py     # python -m future_branch support
+│       ├── analyzer.py     # Python AST & JS/TS contract extraction
+│       ├── cli.py          # Command-line entry point
+│       ├── rehearsal.py    # Git sandbox & merge simulation
+│       └── reporter.py     # HTML report rendering engine
+├── tests/                  # Pytest test suite with shared Git fixtures
+├── pyproject.toml          # PEP 621 packaging & Ruff/pytest configuration
+└── rehearse.py             # Backward-compatible CLI shim
 ```
 
-Use the branch names reported by the AO session when invoking the CLI, then send the report path and suggested intervention back to the responsible agent.
+For complete technical details, see the [Architecture Documentation](docs/architecture.md).
+
+---
+
+## Known Limitations
+
+Future Branch is focused on fast, offline static analysis:
+- **JS/TS Parsing:** Currently uses regex tokenization for property access and fetch endpoints rather than a full TypeScript compiler AST.
+- **Python Schemas:** Introspects standard dataclasses and class attributes; explicit Pydantic v2 `BaseModel` field extraction and SQLAlchemy models are in development.
+- **Dynamic Attributes:** Dynamic runtime evaluation (e.g. `getattr()`, `eval()`, runtime dictionary unpacking) cannot be statically inferred.
+- **Sequential Conflict Stop:** Rehearsal halts on the first Git textual conflict; subsequent branches are not processed until merge markers are resolved.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before submitting pull requests.
+
+### Development Workflow
+
+```bash
+# Run tests
+pytest
+
+# Check linting and formatting
+ruff check .
+ruff format --check .
+```
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
