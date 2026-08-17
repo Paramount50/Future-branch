@@ -593,7 +593,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
       </div>
       <div class="terminal-command">
         <span class="terminal-prompt">&gt;</span>
-        <span>future-branch rehearse {' '.join(branches)} --base {html.escape(str(result.get('base', 'main')))}</span>
+        <span>future-branch {' '.join(html.escape(str(b)) for b in branches)} --base {html.escape(str(result.get('base', 'main')))}</span>
       </div>
       <div class="timestamp">Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</div>
     </div>

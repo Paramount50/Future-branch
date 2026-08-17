@@ -96,8 +96,9 @@ def _js_contracts(source: str) -> dict[str, set[str] | str]:
     result["exports"] = exports
     result["imports"] = {str(x).strip() for item in imports for x in item if x}
     result["api-calls"] = set(re.findall(r"fetch\s*\(\s*['\"]([^'\"]+)", source))
-    result["consumed-fields"] = set(re.findall(r"\bresponse\s*\.\s*([A-Za-z_$][\w$]*)", source))
-    result["consumed-fields"].update(re.findall(r"\bdata\s*\.\s*([A-Za-z_$][\w$]*)", source))
+    result["consumed-fields"] = set(
+        re.findall(r"\b(?:response|res|data|profile|user)\s*\.\s*([A-Za-z_$][\w$]*)", source)
+    )
     return result
 
 

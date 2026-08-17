@@ -1,7 +1,32 @@
+# Python artifacts
 __pycache__/
 *.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
 .venv/
 venv/
-incident_report.html
+ENV/
+env/
+
+# Testing & Tooling caches
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Project generated outputs & temp repos
+incident_report.html
 .demo-repo/
+future-branch-*
+
+# IDE & OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
