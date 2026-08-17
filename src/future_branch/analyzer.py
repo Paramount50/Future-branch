@@ -30,7 +30,7 @@ class ConflictResult:
         return asdict(self)
 
 
-# Kept as a compatibility alias for the first prototype.
+# Compatibility alias
 Conflict = ConflictResult
 
 

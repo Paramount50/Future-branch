@@ -4,7 +4,7 @@ from pathlib import Path
 
 from git import Repo
 
-from rehearse import rehearse_merges
+from future_branch.rehearsal import rehearse_merges
 
 
 def test_merge_conflict_detected(merge_conflict_repo: Path):

@@ -461,11 +461,13 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
             f"<span class='terminal-tab active'>{html.escape(str(x))}</span>" for x in item.get("branches", [])
         )
 
-        # Deterministic root cause from analyzer data
         owner_changed = item.get("owner_changed", "")
         owner_consumer = item.get("owner_consumer", "")
         description = item.get("description", "Contract conflict detected.")
-        root_cause = f"{description} Branch <strong>{html.escape(owner_changed)}</strong> modified the contract, but branch <strong>{html.escape(owner_consumer)}</strong> still depends on the original."
+        root_cause = (
+            f"{description} Branch <strong>{html.escape(owner_changed)}</strong> modified the contract, "
+            f"but branch <strong>{html.escape(owner_consumer)}</strong> still depends on the original."
+        )
 
         branch_a_label = html.escape(owner_changed) if owner_changed else "Branch A"
         branch_b_label = html.escape(owner_consumer) if owner_consumer else "Branch B"
@@ -517,7 +519,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
           {evidence_section}
 
           <div class="action-box">
-            <div class="action-label">&gt; Recommended Intervention (ao send)</div>
+            <div class="action-label">&gt; Recommended Intervention</div>
             <div class="action-desc">{html.escape(str(item.get("suggested_fix", "Resolve the contract mismatch.")))}</div>
           </div>
         </div>
@@ -552,7 +554,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
     <div class="header-wrapper">
       <div>
         <div class="eyebrow">
-          <span>AO / PRE-MERGE REHEARSAL GATE</span>
+          <span>PRE-MERGE REHEARSAL GATE</span>
         </div>
         <h1>{html.escape(title)}</h1>
         <p class="tagline">Individually correct. <strong>Collectively broken.</strong> Caught before merge.</p>

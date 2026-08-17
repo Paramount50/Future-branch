@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from analyzer import (
+from future_branch.analyzer import (
     ConflictResult,
     _js_contracts,
     _python_contracts,

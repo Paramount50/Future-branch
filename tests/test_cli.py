@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from rehearse import main
+from future_branch.cli import main
 
 
 def test_cli_exit_0_on_clean(clean_repo: Path, tmp_path: Path):

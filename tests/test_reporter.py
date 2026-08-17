@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reporter import render_report, write_report
+from future_branch.reporter import render_report, write_report
 
 
 def test_clean_report_contains_passed():
