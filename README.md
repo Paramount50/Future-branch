@@ -139,7 +139,7 @@ For complete technical details, see the [Architecture Documentation](docs/archit
 
 Future Branch is focused on fast, offline static analysis:
 - **JS/TS Parsing:** Currently uses regex tokenization for property access and fetch endpoints rather than a full TypeScript compiler AST.
-- **Python Schemas:** Extracts annotated class/Pydantic fields, aliases, inheritance, return annotations, and FastAPI `response_model`; validators, computed fields, generics, and ORM models remain unsupported.
+- **Python Schemas:** Extracts annotated class/Pydantic fields, aliases, inheritance, return annotations, FastAPI `response_model`, and local `APIRouter`/`include_router` prefixes; validators, computed fields, generics, imported-router composition, and ORM models remain unsupported.
 - **Dynamic Attributes:** Dynamic runtime evaluation (e.g. `getattr()`, `eval()`, runtime dictionary unpacking) cannot be statically inferred.
 - **Conflicted Candidates:** Rehearsal records the first textual conflict and reports semantic coverage as incomplete rather than inventing an `ours` or `theirs` resolution.
 - **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.

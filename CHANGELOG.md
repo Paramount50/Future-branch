@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add SARIF 2.1.0 output for CI code-scanning ingestion, including stable rule IDs, source locations, ownership, remediation, and incomplete-coverage warnings.
 - Match parameterized provider routes against literal and JavaScript template-literal consumers without treating route-parameter renames as endpoint deletion.
 - Extract FastAPI `response_model` declarations and inherited Pydantic-style fields so service-returning handlers retain response contract coverage.
+- Resolve local FastAPI `APIRouter` and `include_router` prefixes into canonical endpoint paths.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.

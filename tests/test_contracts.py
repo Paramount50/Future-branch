@@ -87,6 +87,44 @@ def profile():
     assert {field.name for field in endpoints[0].response_fields} == {"id", "credits"}
 
 
+def test_fastapi_router_and_include_prefixes_are_resolved():
+    source = """
+router = APIRouter(prefix="/users")
+
+@router.get("/{user_id}")
+def user(user_id: str):
+    return {"id": user_id}
+
+app.include_router(router, prefix="/api/v1")
+"""
+
+    endpoints, coverage = extract_python_endpoints(source, "api.py", "candidate-router-prefix")
+
+    assert coverage.status == "supported"
+    assert endpoints[0].identity == ("GET", "/api/v1/users/{user_id}")
+
+
+def test_fastapi_router_mounted_twice_emits_both_endpoints():
+    source = """
+router = APIRouter(prefix="/health")
+
+@router.get("")
+def health():
+    return {"ok": True}
+
+app.include_router(router, prefix="/api/v1")
+app.include_router(router, prefix="/api/v2")
+"""
+
+    endpoints, coverage = extract_python_endpoints(source, "api.py", "candidate-multiple-mounts")
+
+    assert coverage.status == "supported"
+    assert {endpoint.identity for endpoint in endpoints} == {
+        ("GET", "/api/v1/health"),
+        ("GET", "/api/v2/health"),
+    }
+
+
 def test_python_syntax_error_is_coverage_error():
     endpoints, coverage = extract_python_endpoints("def broken(:\n", "broken.py", "candidate-3")
 

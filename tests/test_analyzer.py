@@ -562,3 +562,31 @@ def test_fastapi_response_model_field_removal_is_detected(tmp_path: Path):
 
     assert result["status"] == "conflicts"
     assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_FIELD_REMOVED"]
+
+
+def test_prefixed_fastapi_router_matches_consumer(tmp_path: Path):
+    base_api = (
+        'router = APIRouter(prefix="/profiles")\n\n'
+        '@router.get("/{profile_id}")\n'
+        'def profile(profile_id: str):\n    return {"credits": 1}\n\n'
+        'app.include_router(router, prefix="/api")\n'
+    )
+    changed_api = base_api.replace('return {"credits": 1}', 'return {"balance": 1}')
+    repo = _candidate_repo(
+        tmp_path / "router-prefix-collision",
+        {
+            "api.py": base_api,
+            "client.js": (
+                "export async function load(id) { "
+                "const data = await (await fetch(`/api/profiles/${id}`)).json(); return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {"api.py": changed_api},
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_FIELD_REMOVED"]

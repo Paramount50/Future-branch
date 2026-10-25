@@ -197,7 +197,77 @@ def _class_fields(tree: ast.AST) -> dict[str, tuple[FieldContract, ...]]:
     return models
 
 
-def _route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | None:
+def _join_paths(*parts: str) -> str:
+    joined = "/".join(part.strip("/") for part in parts if part and part != "/")
+    return f"/{joined}" if joined else "/"
+
+
+def _router_prefixes(tree: ast.AST) -> dict[str, tuple[str, ...]]:
+    declared: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Call)
+        ):
+            continue
+        call_name = (
+            node.value.func.id
+            if isinstance(node.value.func, ast.Name)
+            else node.value.func.attr
+            if isinstance(node.value.func, ast.Attribute)
+            else ""
+        )
+        if call_name != "APIRouter":
+            continue
+        prefix = next(
+            (
+                keyword.value.value
+                for keyword in node.value.keywords
+                if keyword.arg == "prefix"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ),
+            "",
+        )
+        declared[node.targets[0].id] = prefix
+
+    mounts: dict[str, list[str]] = {}
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "include_router"
+            and node.args
+            and isinstance(node.args[0], ast.Name)
+        ):
+            continue
+        router_name = node.args[0].id
+        include_prefix = next(
+            (
+                keyword.value.value
+                for keyword in node.keywords
+                if keyword.arg == "prefix"
+                and isinstance(keyword.value, ast.Constant)
+                and isinstance(keyword.value.value, str)
+            ),
+            "",
+        )
+        if router_name in declared:
+            mounts.setdefault(router_name, []).append(include_prefix)
+    return {
+        router_name: tuple(_join_paths(mount, local_prefix) for mount in mounts[router_name])
+        if router_name in mounts
+        else (local_prefix,)
+        for router_name, local_prefix in declared.items()
+    }
+
+
+def _routes(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, router_prefixes: dict[str, tuple[str, ...]]
+) -> list[tuple[str, str]]:
+    routes: list[tuple[str, str]] = []
     for decorator in node.decorator_list:
         if not (
             isinstance(decorator, ast.Call)
@@ -208,8 +278,12 @@ def _route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | No
             and isinstance(decorator.args[0].value, str)
         ):
             continue
-        return decorator.func.attr.upper(), decorator.args[0].value
-    return None
+        owner = decorator.func.value.id if isinstance(decorator.func.value, ast.Name) else ""
+        prefixes = router_prefixes.get(owner, ("",))
+        routes.extend(
+            (decorator.func.attr.upper(), _join_paths(prefix, decorator.args[0].value)) for prefix in prefixes
+        )
+    return routes
 
 
 def _declared_response_fields(
@@ -290,29 +364,30 @@ def extract_python_endpoints(source: str, path: str, snapshot_id: str) -> tuple[
         )
 
     models = _class_fields(tree)
+    router_prefixes = _router_prefixes(tree)
     endpoints: list[EndpointContract] = []
     implicit_fields: dict[str, FieldContract] = {}
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         response_fields = _returned_fields(node, models) or _declared_response_fields(node, models)
-        route = _route(node)
-        if route is None:
+        routes = _routes(node, router_prefixes)
+        if not routes:
             for response_field in response_fields:
                 implicit_fields[response_field.name] = response_field
             continue
-        method, route_path = route
-        endpoints.append(
-            EndpointContract(
-                method=method,
-                path=route_path,
-                request_fields=_request_fields(node, route_path, models),
-                response_fields=response_fields,
-                source=SourceLocation(path=path, line=node.lineno, column=node.col_offset),
-                snapshot_id=snapshot_id,
-                confidence=0.9,
+        for method, route_path in routes:
+            endpoints.append(
+                EndpointContract(
+                    method=method,
+                    path=route_path,
+                    request_fields=_request_fields(node, route_path, models),
+                    response_fields=response_fields,
+                    source=SourceLocation(path=path, line=node.lineno, column=node.col_offset),
+                    snapshot_id=snapshot_id,
+                    confidence=0.9,
+                )
             )
-        )
 
     # A bounded compatibility fallback keeps non-framework examples observable.
     # Its missing identity and lower confidence prevent it from masquerading as
