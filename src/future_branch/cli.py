@@ -32,13 +32,20 @@ def build_parser() -> argparse.ArgumentParser:
         default="console",
         help="stdout format: console, json, or sarif (default: console)",
     )
+    parser.add_argument(
+        "--output",
+        help="write json or sarif output to this path instead of stdout",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
     if len(args.branches) < 2:
-        build_parser().error("at least two branch names are required")
+        parser.error("at least two branch names are required")
+    if args.output and args.format == "console":
+        parser.error("--output requires --format json or --format sarif")
     repo_path = Path(args.repo).resolve()
     report_path = Path(args.report)
     if not report_path.is_absolute():
@@ -67,11 +74,17 @@ def main(argv: list[str] | None = None) -> int:
     status = result.get("status", "error")
     num_conflicts = len(result.get("conflicts", []))
 
-    if args.format == "json":
-        print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if status == "clean" else 1
-    if args.format == "sarif":
-        print(json.dumps(to_sarif(result), indent=2, sort_keys=True))
+    if args.format in {"json", "sarif"}:
+        payload = result if args.format == "json" else to_sarif(result)
+        rendered = json.dumps(payload, indent=2, sort_keys=True)
+        if args.output:
+            output_path = Path(args.output)
+            if not output_path.is_absolute():
+                output_path = repo_path / output_path
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(rendered + "\n", encoding="utf-8")
+        else:
+            print(rendered)
         return 0 if status == "clean" else 1
 
     # ANSI escape codes for coloring

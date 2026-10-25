@@ -72,11 +72,19 @@ future-branch <path-to-repo> <branch-1> <branch-2> [branch-3 ...] [options]
 | `--base` | `main` | Base branch to rehearse against |
 | `--report` | `incident_report.html` | Path where the HTML incident report will be generated |
 | `--format` | `console` | Standard output format: `console`, machine-readable `json`, or SARIF 2.1.0 `sarif` |
+| `--output` | stdout | Write JSON or SARIF to a file; relative paths resolve inside the analyzed repository |
 
 ### Example
 
 ```bash
 future-branch ./my-repo agent-backend-refactor agent-frontend-widget --base main --report reports/incident.html
+```
+
+For a CI artifact suitable for code-scanning upload:
+
+```bash
+future-branch ./my-repo agent-backend-refactor agent-frontend-widget \
+  --base main --format sarif --output reports/future-branch.sarif
 ```
 
 ---

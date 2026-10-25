@@ -79,3 +79,33 @@ def test_cli_sarif_contains_clean_run(clean_repo: Path, tmp_path: Path, capsys):
     assert sarif["version"] == "2.1.0"
     assert sarif["runs"][0]["results"] == []
     assert sarif["runs"][0]["properties"]["status"] == "clean"
+
+
+def test_cli_writes_sarif_artifact(clean_repo: Path, tmp_path: Path, capsys):
+    report_file = tmp_path / "report.html"
+    output_file = tmp_path / "artifacts" / "future-branch.sarif"
+
+    code = main(
+        [
+            str(clean_repo),
+            "feature-a",
+            "feature-b",
+            "--report",
+            str(report_file),
+            "--format",
+            "sarif",
+            "--output",
+            str(output_file),
+        ]
+    )
+
+    assert code == 0
+    assert capsys.readouterr().out == ""
+    assert json.loads(output_file.read_text(encoding="utf-8"))["version"] == "2.1.0"
+
+
+def test_cli_rejects_output_with_console_format(clean_repo: Path):
+    with pytest.raises(SystemExit) as exc_info:
+        main([str(clean_repo), "feature-a", "feature-b", "--output", "result.json"])
+
+    assert exc_info.value.code != 0
