@@ -284,8 +284,6 @@ class BranchAnalyzer:
                     {field.name: field for field in new_endpoint.response_fields} if new_endpoint is not None else {}
                 )
                 removed = set(old_fields) - set(new_fields)
-                if not removed:
-                    continue
                 for consumer in matching_consumers:
                     used = {field.name for field in consumer.response_fields}
                     stale = sorted(removed & used)
@@ -320,6 +318,50 @@ class BranchAnalyzer:
                             code="ERR_FIELD_REMOVED",
                         )
                     )
+
+                if new_endpoint is None:
+                    continue
+                old_request_names = {field.name for field in old_endpoint.request_fields}
+                added_required = [
+                    field
+                    for field in new_endpoint.request_fields
+                    if field.required and field.name not in old_request_names
+                ]
+                for consumer in inventory.consumers:
+                    if not _consumer_matches(new_endpoint, consumer):
+                        continue
+                    supplied = {field.name for field in consumer.request_fields}
+                    for required_field in added_required:
+                        if (
+                            required_field.name in supplied
+                            or required_field.location not in consumer.complete_request_locations
+                        ):
+                            continue
+                        consumer_path = consumer.source.path
+                        consumer_owners = [
+                            name for name, changed in changes_by_branch.items() if consumer_path in changed
+                        ]
+                        owners = list(dict.fromkeys([*producer_owners, *consumer_owners]))
+                        results.append(
+                            ConflictResult(
+                                consumer_path,
+                                owners,
+                                f"Candidate endpoint {new_endpoint.method} {new_endpoint.path} added required "
+                                f"{required_field.location} parameter {required_field.name!r}, but the candidate "
+                                "consumer does not supply it.",
+                                f"Supply {required_field.name!r} or make the new parameter optional during migration.",
+                                changed_code=f"required {required_field.location}: {required_field.name}",
+                                expected_code=f"{consumer.method} {consumer.target_endpoint}",
+                                owner_changed=producer_owners[0] if producer_owners else "candidate",
+                                owner_consumer=consumer_owners[0] if consumer_owners else "base",
+                                evidence=[
+                                    f"{path}:{required_field.source_line}: required provider field",
+                                    f"{consumer_path}:{consumer.source.line}: complete {required_field.location} request evidence",
+                                    f"candidate: {candidate.hexsha}",
+                                ],
+                                code="ERR_PARAM_REQUIRED",
+                            )
+                        )
 
         return results, incomplete, inventory
 

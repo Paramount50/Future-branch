@@ -109,6 +109,36 @@ await fetch('/users', {
     assert consumers[0].identity == ("POST", "/users")
 
 
+def test_javascript_request_fields_and_target_are_extracted():
+    source = """
+await fetch('/users?verbose=true', {
+  method: 'POST',
+  body: JSON.stringify({ name: 'Ada', "org_id": orgId }),
+});
+"""
+
+    consumers, coverage = extract_javascript_consumers(source, "client.ts", "candidate-request")
+
+    assert coverage.status == "supported"
+    consumer = consumers[0]
+    assert consumer.identity == ("POST", "/users")
+    assert {(field.name, field.location) for field in consumer.request_fields} == {
+        ("verbose", "query"),
+        ("name", "body"),
+        ("org_id", "body"),
+    }
+    assert consumer.complete_request_locations == ("query", "body")
+
+
+def test_dynamic_javascript_body_is_not_marked_complete():
+    consumers, coverage = extract_javascript_consumers(
+        'fetch("/users", { method: "POST", body: payload })', "client.ts", "candidate-dynamic"
+    )
+
+    assert consumers[0].complete_request_locations == ("query",)
+    assert coverage.status == "partial"
+
+
 def test_inventory_serializes_versioned_records():
     endpoints, python_coverage = extract_python_endpoints(
         '@app.get("/health")\ndef health():\n    return {"ok": True}\n', "api.py", "candidate-5"

@@ -310,3 +310,95 @@ def test_coordinated_http_method_change_is_clean(tmp_path: Path):
 
     assert result["status"] == "clean"
     assert result["conflicts"] == []
+
+
+def test_new_required_query_parameter_is_detected(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "required-query",
+        {
+            "api.py": '@app.get("/profile")\ndef profile():\n    return {"ok": True}\n',
+            "client.js": 'export async function load() { await fetch("/profile"); }\n',
+            "README.md": "base\n",
+        },
+        {"api.py": '@app.get("/profile")\ndef profile(org_id: str):\n    return {"ok": True}\n'},
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_PARAM_REQUIRED"]
+
+
+def test_coordinated_required_query_parameter_is_clean(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "coordinated-query",
+        {
+            "api.py": '@app.get("/profile")\ndef profile():\n    return {"ok": True}\n',
+            "client.js": 'export async function load() { await fetch("/profile"); }\n',
+        },
+        {"api.py": '@app.get("/profile")\ndef profile(org_id: str):\n    return {"ok": True}\n'},
+        {"client.js": 'export async function load() { await fetch("/profile?org_id=acme"); }\n'},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+    assert result["conflicts"] == []
+
+
+def test_dynamic_request_body_does_not_create_missing_parameter_false_positive(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "dynamic-body",
+        {
+            "api.py": (
+                "class Update:\n    name: str\n\n"
+                '@app.post("/profile")\ndef profile(payload: Update):\n    return {"ok": True}\n'
+            ),
+            "client.js": (
+                'export async function save(payload) { await fetch("/profile", { method: "POST", body: payload }); }\n'
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "class Update:\n    name: str\n    org_id: str\n\n"
+                '@app.post("/profile")\ndef profile(payload: Update):\n    return {"ok": True}\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "incomplete"
+    assert result["conflicts"] == []
+
+
+def test_new_required_body_field_is_detected_from_literal_request(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "required-body",
+        {
+            "api.py": (
+                "class Update:\n    name: str\n\n"
+                '@app.post("/profile")\ndef profile(payload: Update):\n    return {"ok": True}\n'
+            ),
+            "client.js": (
+                'export async function save() { await fetch("/profile", '
+                '{ method: "POST", body: JSON.stringify({ name: "Ada" }) }); }\n'
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "class Update:\n    name: str\n    org_id: str\n\n"
+                '@app.post("/profile")\ndef profile(payload: Update):\n    return {"ok": True}\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_PARAM_REQUIRED"]

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import ast
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
+from urllib.parse import parse_qsl, urlsplit
 
 UCM_VERSION = "1"
 
@@ -59,6 +60,7 @@ class ConsumerContract:
     source: SourceLocation
     snapshot_id: str
     confidence: float
+    complete_request_locations: tuple[str, ...] = ()
     extractor: str = "javascript-pattern-v1"
     ucm_version: str = UCM_VERSION
 
@@ -184,12 +186,19 @@ def _route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | No
     return None
 
 
-def _request_fields(node: ast.FunctionDef | ast.AsyncFunctionDef, route_path: str) -> tuple[FieldContract, ...]:
+def _request_fields(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    route_path: str,
+    models: dict[str, tuple[FieldContract, ...]],
+) -> tuple[FieldContract, ...]:
     positional = [*node.args.posonlyargs, *node.args.args]
     defaults = [None] * (len(positional) - len(node.args.defaults)) + list(node.args.defaults)
     fields: list[FieldContract] = []
     for argument, default in zip(positional, defaults, strict=True):
         if argument.arg in {"self", "cls"}:
+            continue
+        if isinstance(argument.annotation, ast.Name) and argument.annotation.id in models:
+            fields.extend(replace(model_field, location="body") for model_field in models[argument.annotation.id])
             continue
         type_repr, nullable = _annotation(argument.annotation)
         fields.append(
@@ -259,7 +268,7 @@ def extract_python_endpoints(source: str, path: str, snapshot_id: str) -> tuple[
             EndpointContract(
                 method=method,
                 path=route_path,
-                request_fields=_request_fields(node, route_path),
+                request_fields=_request_fields(node, route_path, models),
                 response_fields=response_fields,
                 source=SourceLocation(path=path, line=node.lineno, column=node.col_offset),
                 snapshot_id=snapshot_id,
@@ -310,7 +319,7 @@ def extract_python_endpoints(source: str, path: str, snapshot_id: str) -> tuple[
 def extract_javascript_consumers(
     source: str, path: str, snapshot_id: str
 ) -> tuple[list[ConsumerContract], CoverageRecord]:
-    calls: list[tuple[str, str, int]] = []
+    calls: list[tuple[str, str, int, tuple[FieldContract, ...], tuple[str, ...]]] = []
     for call in re.finditer(r"fetch\s*\(\s*(['\"])([^'\"]+)\1", source):
         depth = 1
         quote: str | None = None
@@ -338,7 +347,34 @@ def extract_javascript_consumers(
         options = source[call.end() : end]
         method_match = re.search(r"\bmethod\s*:\s*['\"]([A-Za-z]+)['\"]", options)
         method = method_match.group(1).upper() if method_match else "GET"
-        calls.append((call.group(2), method, call.start()))
+        raw_target = call.group(2)
+        split_target = urlsplit(raw_target)
+        target = split_target.path or raw_target
+        request_fields = [
+            FieldContract(
+                name=name, required=True, location="query", source_line=source.count("\n", 0, call.start()) + 1
+            )
+            for name, _ in parse_qsl(split_target.query, keep_blank_values=True)
+        ]
+        complete_locations = ["query"]
+        body_match = re.search(r"\bbody\s*:\s*JSON\.stringify\s*\(\s*\{(.*?)\}\s*\)", options, re.DOTALL)
+        body_present = re.search(r"\bbody\s*:", options) is not None
+        if body_match:
+            for field_match in re.finditer(
+                r"(?:^|,)\s*(?:['\"]([^'\"]+)['\"]|([A-Za-z_$][\w$]*))\s*:", body_match.group(1)
+            ):
+                request_fields.append(
+                    FieldContract(
+                        name=field_match.group(1) or field_match.group(2),
+                        required=True,
+                        location="body",
+                        source_line=source.count("\n", 0, call.start()) + 1,
+                    )
+                )
+            complete_locations.append("body")
+        elif not body_present:
+            complete_locations.append("body")
+        calls.append((target, method, call.start(), tuple(request_fields), tuple(complete_locations)))
     field_lines: dict[str, int] = {}
     for match in re.finditer(r"\b(?:response|res|data|profile|user)\s*\.\s*([A-Za-z_$][\w$]*)", source):
         name = match.group(1)
@@ -356,13 +392,14 @@ def extract_javascript_consumers(
         ConsumerContract(
             method=method,
             target_endpoint=target,
-            request_fields=(),
+            request_fields=request_fields,
             response_fields=response_fields,
             source=SourceLocation(path=path, line=source.count("\n", 0, offset) + 1),
             snapshot_id=snapshot_id,
             confidence=0.7 if len(calls) == 1 else 0.45,
+            complete_request_locations=complete_locations,
         )
-        for target, method, offset in calls
+        for target, method, offset, request_fields, complete_locations in calls
     ]
     if not calls and response_fields:
         first_field = min((field.source_line for field in response_fields), default=1)
@@ -377,12 +414,15 @@ def extract_javascript_consumers(
                 confidence=0.35,
             )
         )
+    has_dynamic_body = any("body" not in complete_locations for *_, complete_locations in calls)
     status: Literal["supported", "partial"] = (
-        "supported" if len(calls) == 1 or (not calls and not response_fields) else "partial"
+        "supported" if (len(calls) == 1 and not has_dynamic_body) or (not calls and not response_fields) else "partial"
     )
     reason = (
         "Extracted one fetch consumer."
-        if len(calls) == 1
+        if len(calls) == 1 and not has_dynamic_body
+        else "A dynamic request body could not be enumerated."
+        if len(calls) == 1 and has_dynamic_body
         else "No consumer contract found."
         if not calls and not response_fields
         else "No fetch target; emitted an unresolved file-level consumer."
