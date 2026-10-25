@@ -30,6 +30,7 @@ Future Branch rehearses the merge ahead of time and surfaces cross-branch contra
 
 - 🛡️ **Immutable Git Rehearsal:** Builds the exact sequential candidate with `git merge-tree` without touching your working tree, index, or source branches.
 - 🔍 **Static Contract Analysis:** Uses Python AST traversal and JS/TS pattern matching to detect function signature drifts, removed schema fields, and broken route endpoints.
+- 🧾 **Versioned Contract Evidence:** Emits a language-neutral contract inventory with endpoint identity, requiredness, nullability, source locations, extractor confidence, and snapshot provenance.
 - 📊 **Self-Contained Dark HTML Report:** Generates an incident report with side-by-side contract diffs, evidence traces, and actionable interventions.
 - ⚡ **Zero External Heavy Dependencies:** Pure Python + Git operations. No LLM APIs, no build pipelines, no runtime execution of untrusted code.
 - 🚦 **CI/CD Ready:** Returns exit code `0` on clean rehearsals and `1` on conflicts for seamless integration into CI gates.
@@ -119,6 +120,7 @@ Future-branch/
 │       ├── __init__.py     # Package metadata
 │       ├── __main__.py     # python -m future_branch support
 │       ├── analyzer.py     # Python AST & JS/TS contract extraction
+│       ├── contracts.py    # Versioned universal contract records and bounded extractors
 │       ├── cli.py          # Command-line entry point
 │       ├── rehearsal.py    # Git sandbox & merge simulation
 │       └── reporter.py     # HTML report rendering engine
@@ -139,6 +141,7 @@ Future Branch is focused on fast, offline static analysis:
 - **Dynamic Attributes:** Dynamic runtime evaluation (e.g. `getattr()`, `eval()`, runtime dictionary unpacking) cannot be statically inferred.
 - **Conflicted Candidates:** Rehearsal records the first textual conflict and reports semantic coverage as incomplete rather than inventing an `ours` or `theirs` resolution.
 - **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.
+- **Linkage Coverage:** Consumers without a resolved endpoint and files with multiple fetch calls are preserved as partial evidence and make the rehearsal `incomplete` when Python contracts changed.
 
 ---
 

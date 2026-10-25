@@ -163,9 +163,12 @@ def test_analyzes_coordinated_merged_state(tmp_path: Path):
 
     result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
 
-    assert result["status"] == "clean"
+    assert result["status"] == "incomplete"
     assert result["candidate_ref"]
     assert result["candidate_tree"]
+    assert result["contracts"]["ucm_version"] == "1"
+    assert result["contracts"]["snapshot_id"] == result["candidate_ref"]
+    assert any(record["status"] == "partial" for record in result["contracts"]["coverage"])
 
 
 def test_deleted_provider_is_not_reported_clean(tmp_path: Path):
@@ -210,7 +213,8 @@ def test_logs_are_not_response_fields(tmp_path: Path):
 
     result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
 
-    assert result["status"] == "clean"
+    assert result["status"] == "incomplete"
+    assert result["conflicts"] == []
 
 
 def test_endpoint_identity_prevents_field_name_collision(tmp_path: Path):

@@ -11,6 +11,14 @@ from typing import Any
 
 from git import Repo
 
+from future_branch.contracts import (
+    ConsumerContract,
+    ContractInventory,
+    EndpointContract,
+    extract_javascript_consumers,
+    extract_python_endpoints,
+)
+
 
 @dataclass
 class ConflictResult:
@@ -141,6 +149,22 @@ def _endpoint_paths(contracts: dict[str, set[str] | str]) -> set[str]:
     return {route.split(" ", 1)[1] for route in contracts.get("routes", set()) if " " in route}
 
 
+def _matching_endpoint(endpoint: EndpointContract, candidates: list[EndpointContract]) -> EndpointContract | None:
+    if endpoint.identity is not None:
+        return next((candidate for candidate in candidates if candidate.identity == endpoint.identity), None)
+    return next((candidate for candidate in candidates if candidate.identity is None), None)
+
+
+def _consumer_matches(endpoint: EndpointContract, consumer: ConsumerContract) -> bool:
+    if endpoint.identity is None:
+        return True
+    if consumer.identity is None:
+        return False
+    endpoint_method, endpoint_path = endpoint.identity
+    consumer_method, consumer_path = consumer.identity
+    return endpoint_path == consumer_path and consumer_method in {endpoint_method, "ANY"}
+
+
 class BranchAnalyzer:
     def __init__(self, repo_path: str | Path = ".") -> None:
         self.repo = Repo(str(repo_path))
@@ -161,7 +185,7 @@ class BranchAnalyzer:
 
     def _semantic_analysis(
         self, base_ref: str, branches: list[str], candidate_ref: str
-    ) -> tuple[list[ConflictResult], list[str]]:
+    ) -> tuple[list[ConflictResult], list[str], ContractInventory]:
         base = self._commit(base_ref)
         candidate = self._commit(candidate_ref)
         commits = [(name, self._commit(name)) for name in branches]
@@ -170,63 +194,80 @@ class BranchAnalyzer:
         changes_by_branch = {name: _changed(base, commit) for name, commit in commits}
         candidate_changes = _changed(base, candidate)
         python_changes = {path for path in candidate_changes if Path(path).suffix.lower() == ".py"}
-        consumers: dict[str, dict[str, set[str] | str]] = {}
+        inventory = ContractInventory(snapshot_id=candidate.hexsha)
 
         for path in _source_paths(candidate, {".js", ".mjs", ".ts", ".tsx"}):
             source = _read(candidate, path)
             if source is not None:
-                consumers[path] = _js_contracts(source)
+                consumers, coverage = extract_javascript_consumers(source, path, candidate.hexsha)
+                inventory.consumers.extend(consumers)
+                inventory.coverage.append(coverage)
+                if coverage.status == "partial":
+                    incomplete.append(f"Partial JavaScript consumer coverage at {path}: {coverage.reason}")
 
         for path in sorted(python_changes):
             old_source = _read(base, path) or ""
             new_source = _read(candidate, path) or ""
-            old_contracts = _python_contracts(old_source)
-            new_contracts = _python_contracts(new_source)
-            if old_source and not old_contracts:
-                incomplete.append(f"Could not parse base Python source at {path}.")
+            old_endpoints, old_coverage = extract_python_endpoints(old_source, path, base.hexsha)
+            new_endpoints, new_coverage = extract_python_endpoints(new_source, path, candidate.hexsha)
+            inventory.endpoints.extend(new_endpoints)
+            inventory.coverage.append(new_coverage)
+            if old_coverage.status == "error":
+                incomplete.append(f"Could not parse base Python source at {path}: {old_coverage.reason}")
                 continue
-            if new_source and not new_contracts:
-                incomplete.append(f"Could not parse candidate Python source at {path}.")
+            if new_coverage.status == "error":
+                incomplete.append(f"Could not parse candidate Python source at {path}: {new_coverage.reason}")
                 continue
+            if new_coverage.status == "partial":
+                incomplete.append(f"Partial Python endpoint coverage at {path}: {new_coverage.reason}")
 
-            old_fields = _all_fields(old_contracts)
-            new_fields = _all_fields(new_contracts)
-            removed = old_fields - new_fields
-            if not removed:
-                continue
-
-            producer_routes = _endpoint_paths(old_contracts) | _endpoint_paths(new_contracts)
             producer_owners = [name for name, changed in changes_by_branch.items() if path in changed]
-            for consumer_path, consumer in consumers.items():
-                calls = set(consumer.get("api-calls", set()))
-                if producer_routes and calls and producer_routes.isdisjoint(calls):
-                    continue
-                used = set(consumer.get("consumed-fields", set()))
-                stale = sorted(removed & used)
-                if not stale:
-                    continue
-                consumer_owners = [name for name, changed in changes_by_branch.items() if consumer_path in changed]
-                owners = list(dict.fromkeys([*producer_owners, *consumer_owners]))
-                field_name = stale[0]
-                results.append(
-                    ConflictResult(
-                        consumer_path,
-                        owners,
-                        f"Candidate contract removed '{field_name}', but the candidate consumer still reads it.",
-                        f"Update the consumer or preserve '{field_name}' as a compatibility alias.",
-                        changed_code=f"{field_name} -> {sorted(new_fields)}",
-                        expected_code=f"response.{field_name}",
-                        owner_changed=producer_owners[0] if producer_owners else "candidate",
-                        owner_consumer=consumer_owners[0] if consumer_owners else "base",
-                        evidence=[
-                            f"{path}: fields changed from {sorted(old_fields)} to {sorted(new_fields)}",
-                            f"{consumer_path}: consumes {field_name}",
-                            f"candidate: {candidate.hexsha}",
-                        ],
-                    )
+            for old_endpoint in old_endpoints:
+                new_endpoint = _matching_endpoint(old_endpoint, new_endpoints)
+                old_fields = {field.name: field for field in old_endpoint.response_fields}
+                new_fields = (
+                    {field.name: field for field in new_endpoint.response_fields} if new_endpoint is not None else {}
                 )
+                removed = set(old_fields) - set(new_fields)
+                if not removed:
+                    continue
+                for consumer in inventory.consumers:
+                    if not _consumer_matches(old_endpoint, consumer):
+                        continue
+                    used = {field.name for field in consumer.response_fields}
+                    stale = sorted(removed & used)
+                    if not stale:
+                        continue
+                    consumer_path = consumer.source.path
+                    consumer_owners = [name for name, changed in changes_by_branch.items() if consumer_path in changed]
+                    owners = list(dict.fromkeys([*producer_owners, *consumer_owners]))
+                    field_name = stale[0]
+                    endpoint_label = (
+                        f"{old_endpoint.method} {old_endpoint.path}"
+                        if old_endpoint.path is not None
+                        else f"unresolved contract in {path}"
+                    )
+                    results.append(
+                        ConflictResult(
+                            consumer_path,
+                            owners,
+                            f"Candidate contract removed '{field_name}', but the candidate consumer still reads it.",
+                            f"Update the consumer or preserve '{field_name}' as a compatibility alias.",
+                            changed_code=f"{field_name} -> {sorted(new_fields)}",
+                            expected_code=f"response.{field_name}",
+                            owner_changed=producer_owners[0] if producer_owners else "candidate",
+                            owner_consumer=consumer_owners[0] if consumer_owners else "base",
+                            evidence=[
+                                f"{path}:{old_endpoint.source.line}: {endpoint_label}",
+                                f"{consumer_path}:{consumer.source.line}: consumes {field_name}",
+                                f"candidate: {candidate.hexsha}",
+                                f"producer confidence: {old_endpoint.confidence:.2f}",
+                                f"consumer confidence: {consumer.confidence:.2f}",
+                            ],
+                        )
+                    )
 
-        return results, incomplete
+        return results, incomplete, inventory
 
     def semantic_conflicts(
         self, base_ref: str, branches: list[str], candidate_ref: str | None = None
@@ -238,7 +279,7 @@ class BranchAnalyzer:
             if rehearsal.candidate_ref is None:
                 return []
             candidate_ref = rehearsal.candidate_ref
-        results, _ = self._semantic_analysis(base_ref, branches, candidate_ref)
+        results, _, _ = self._semantic_analysis(base_ref, branches, candidate_ref)
         return results
 
     def analyze(
@@ -265,8 +306,9 @@ class BranchAnalyzer:
                 incomplete.extend(rehearsal.incomplete_reasons)
 
             conflicts = list(merge_conflicts)
+            inventory: ContractInventory | None = None
             if candidate_ref is not None:
-                semantic, coverage_gaps = self._semantic_analysis(base, branches, candidate_ref)
+                semantic, coverage_gaps, inventory = self._semantic_analysis(base, branches, candidate_ref)
                 conflicts.extend(semantic)
                 incomplete.extend(coverage_gaps)
             elif not incomplete:
@@ -281,6 +323,7 @@ class BranchAnalyzer:
                 "candidate_tree": candidate_tree,
                 "conflicts": [x.to_dict() for x in conflicts],
                 "incomplete_reasons": incomplete,
+                "contracts": inventory.to_dict() if inventory is not None else None,
             }
         except Exception as exc:
             return {"status": "error", "base": base, "branches": branches, "conflicts": [], "error": str(exc)}

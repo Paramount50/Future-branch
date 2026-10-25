@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+from future_branch.contracts import (
+    UCM_VERSION,
+    ContractInventory,
+    extract_javascript_consumers,
+    extract_python_endpoints,
+)
+
+
+def test_python_endpoint_preserves_presence_and_nullability():
+    source = """
+from typing import Optional
+from pydantic import BaseModel, Field
+
+class UserResponse(BaseModel):
+    name: str
+    nickname: Optional[str]
+    bio: Optional[str] = None
+    internal_id: int = Field(alias="id")
+
+@app.get("/users/{user_id}")
+def get_user(user_id: str, verbose: bool = False) -> UserResponse:
+    raise NotImplementedError
+"""
+
+    endpoints, coverage = extract_python_endpoints(source, "api/users.py", "candidate-1")
+
+    assert coverage.status == "supported"
+    assert len(endpoints) == 1
+    endpoint = endpoints[0]
+    assert endpoint.identity == ("GET", "/users/{user_id}")
+    assert endpoint.snapshot_id == "candidate-1"
+    assert endpoint.ucm_version == UCM_VERSION
+
+    request = {field.name: field for field in endpoint.request_fields}
+    assert request["user_id"].required is True
+    assert request["user_id"].location == "path"
+    assert request["verbose"].required is False
+    assert request["verbose"].location == "query"
+
+    response = {field.name: field for field in endpoint.response_fields}
+    assert response["nickname"].required is True
+    assert response["nickname"].nullable is True
+    assert response["bio"].required is False
+    assert response["bio"].nullable is True
+    assert response["id"].declared_name == "internal_id"
+
+
+def test_python_return_dict_is_endpoint_specific():
+    source = """
+@app.get("/profile")
+def profile():
+    return {"credits": 1, "name": "Ada"}
+
+@app.get("/billing")
+def billing():
+    return {"plan": "pro"}
+"""
+
+    endpoints, _ = extract_python_endpoints(source, "api.py", "candidate-2")
+
+    by_path = {endpoint.path: {field.name for field in endpoint.response_fields} for endpoint in endpoints}
+    assert by_path["/profile"] == {"credits", "name"}
+    assert by_path["/billing"] == {"plan"}
+
+
+def test_python_syntax_error_is_coverage_error():
+    endpoints, coverage = extract_python_endpoints("def broken(:\n", "broken.py", "candidate-3")
+
+    assert endpoints == []
+    assert coverage.status == "error"
+    assert coverage.source.path == "broken.py"
+
+
+def test_javascript_consumer_has_snapshot_and_source_evidence():
+    source = """
+export async function load() {
+  const response = await fetch('/profile');
+  const { credits } = await response.json();
+  return credits;
+}
+"""
+
+    consumers, coverage = extract_javascript_consumers(source, "client.ts", "candidate-4")
+
+    assert coverage.status == "supported"
+    assert len(consumers) == 1
+    consumer = consumers[0]
+    assert consumer.identity == ("GET", "/profile")
+    assert consumer.source.line == 3
+    assert consumer.snapshot_id == "candidate-4"
+    assert {field.name for field in consumer.response_fields} == {"credits"}
+    assert consumer.response_fields[0].source_line == 4
+
+
+def test_inventory_serializes_versioned_records():
+    endpoints, python_coverage = extract_python_endpoints(
+        '@app.get("/health")\ndef health():\n    return {"ok": True}\n', "api.py", "candidate-5"
+    )
+    consumers, js_coverage = extract_javascript_consumers(
+        'fetch("/health").then(response => response.json())', "client.js", "candidate-5"
+    )
+    inventory = ContractInventory(
+        snapshot_id="candidate-5",
+        endpoints=endpoints,
+        consumers=consumers,
+        coverage=[python_coverage, js_coverage],
+    )
+
+    encoded = inventory.to_dict()
+
+    assert encoded["ucm_version"] == UCM_VERSION
+    assert encoded["snapshot_id"] == "candidate-5"
+    assert encoded["endpoints"][0]["source"]["path"] == "api.py"
+    assert encoded["consumers"][0]["source"]["path"] == "client.js"

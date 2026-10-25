@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Limit Python response fields to returned dictionaries and class fields instead of every string literal.
 - Check unchanged JavaScript/TypeScript consumers and basic destructuring against changed Python contracts.
 - Use known endpoint paths to avoid matching identical field names across unrelated routes.
+- Emit a versioned contract inventory with endpoint identities, request/response fields, independent required/nullable flags, source evidence, confidence, and snapshot provenance.
+- Surface unresolved producer or consumer linkage as incomplete coverage instead of silently treating heuristic evidence as complete.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.
