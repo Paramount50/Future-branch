@@ -166,6 +166,45 @@ def _consumer_matches(endpoint: EndpointContract, consumer: ConsumerContract) ->
     return endpoint_path == consumer_path and consumer_method in {endpoint_method, "ANY"}
 
 
+def _wire_type(type_repr: str) -> str | None:
+    """Map common Python annotations to conservative JSON wire categories."""
+    compact = type_repr.replace(" ", "")
+    if compact.startswith("Optional[") and compact.endswith("]"):
+        compact = compact[9:-1]
+    compact = compact.removesuffix("|None").removeprefix("None|")
+    lowered = compact.lower()
+    primitives = {
+        "str": "string",
+        "uuid": "string",
+        "date": "string",
+        "datetime": "string",
+        "int": "number",
+        "float": "number",
+        "decimal": "number",
+        "bool": "boolean",
+        "dict": "object",
+        "mapping": "object",
+    }
+    if lowered in primitives:
+        return primitives[lowered]
+    generic = re.fullmatch(r"(list|sequence|tuple|set)\[(.+)\]", lowered)
+    if generic:
+        item_type = _wire_type(generic.group(2))
+        return f"array<{item_type}>" if item_type else "array"
+    if re.fullmatch(r"(dict|mapping)\[.+\]", lowered):
+        return "object"
+    return None
+
+
+def _field_breaks_consumer(old: Any, new: Any) -> bool:
+    old_wire = _wire_type(old.type_repr)
+    new_wire = _wire_type(new.type_repr)
+    type_changed = old_wire is not None and new_wire is not None and old_wire != new_wire
+    lost_presence = old.required and not new.required
+    gained_null = not old.nullable and new.nullable
+    return type_changed or lost_presence or gained_null
+
+
 class BranchAnalyzer:
     def __init__(self, repo_path: str | Path = ".") -> None:
         self.repo = Repo(str(repo_path))
@@ -318,6 +357,45 @@ class BranchAnalyzer:
                             code="ERR_FIELD_REMOVED",
                         )
                     )
+
+                if new_endpoint is not None:
+                    for consumer in matching_consumers:
+                        used = {field.name for field in consumer.response_fields}
+                        consumer_path = consumer.source.path
+                        consumer_owners = [
+                            name for name, changed in changes_by_branch.items() if consumer_path in changed
+                        ]
+                        owners = list(dict.fromkeys([*producer_owners, *consumer_owners]))
+                        for field_name in sorted(set(old_fields) & set(new_fields) & used):
+                            old_field = old_fields[field_name]
+                            new_field = new_fields[field_name]
+                            if not _field_breaks_consumer(old_field, new_field):
+                                continue
+                            old_shape = (
+                                f"{old_field.type_repr}, required={old_field.required}, nullable={old_field.nullable}"
+                            )
+                            new_shape = (
+                                f"{new_field.type_repr}, required={new_field.required}, nullable={new_field.nullable}"
+                            )
+                            results.append(
+                                ConflictResult(
+                                    consumer_path,
+                                    owners,
+                                    f"Candidate response field {field_name!r} changed from {old_shape} to {new_shape}, "
+                                    "but the candidate consumer still reads it.",
+                                    "Update the consumer for the new response shape or preserve a compatible wire contract.",
+                                    changed_code=f"{field_name}: {old_shape} -> {new_shape}",
+                                    expected_code=f"response.{field_name}",
+                                    owner_changed=producer_owners[0] if producer_owners else "candidate",
+                                    owner_consumer=consumer_owners[0] if consumer_owners else "base",
+                                    evidence=[
+                                        f"{path}:{new_field.source_line}: candidate provider field",
+                                        f"{consumer_path}:{consumer.source.line}: candidate consumer",
+                                        f"candidate: {candidate.hexsha}",
+                                    ],
+                                    code="ERR_TYPE_MUTATION",
+                                )
+                            )
 
                 if new_endpoint is None:
                     continue

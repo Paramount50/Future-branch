@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Emit a branch-pair merge matrix for conflict attribution, capped at 500 checks to bound quadratic work while preserving ordered candidate construction.
 - Detect removed endpoints and HTTP method changes even when a caller does not read response fields, and emit stable conflict codes in structured output.
 - Detect newly required query and body parameters when literal caller evidence proves the field is absent; dynamic request bodies remain unclassified to avoid false positives.
+- Detect consumed response fields whose normalized JSON wire type, presence guarantee, or nullability becomes incompatible.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.

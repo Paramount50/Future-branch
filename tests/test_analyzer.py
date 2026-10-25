@@ -402,3 +402,90 @@ def test_new_required_body_field_is_detected_from_literal_request(tmp_path: Path
 
     assert result["status"] == "conflicts"
     assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_PARAM_REQUIRED"]
+
+
+def test_consumed_response_type_mutation_is_detected(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "type-mutation",
+        {
+            "api.py": (
+                "class Profile:\n    credits: int\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            ),
+            "client.js": (
+                'export async function load() { const data = await (await fetch("/profile")).json(); '
+                "return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "class Profile:\n    credits: str\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_TYPE_MUTATION"]
+
+
+def test_numeric_response_widening_is_wire_compatible(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "numeric-widening",
+        {
+            "api.py": (
+                "class Profile:\n    credits: int\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            ),
+            "client.js": (
+                'export async function load() { const data = await (await fetch("/profile")).json(); '
+                "return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "class Profile:\n    credits: float\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+    assert result["conflicts"] == []
+
+
+def test_consumed_response_becoming_nullable_is_detected(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "nullable-mutation",
+        {
+            "api.py": (
+                "class Profile:\n    name: str\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            ),
+            "client.js": (
+                'export async function load() { const data = await (await fetch("/profile")).json(); '
+                "return data.name; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "from typing import Optional\n\nclass Profile:\n    name: Optional[str] = None\n\n"
+                '@app.get("/profile")\ndef profile() -> Profile:\n    raise NotImplementedError\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_TYPE_MUTATION"]
