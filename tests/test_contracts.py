@@ -139,6 +139,13 @@ def test_dynamic_javascript_body_is_not_marked_complete():
     assert coverage.status == "partial"
 
 
+def test_javascript_template_literal_target_is_extracted():
+    consumers, coverage = extract_javascript_consumers("fetch(`/users/${userId}`)", "client.ts", "candidate-template")
+
+    assert coverage.status == "supported"
+    assert consumers[0].identity == ("GET", "/users/${userId}")
+
+
 def test_inventory_serializes_versioned_records():
     endpoints, python_coverage = extract_python_endpoints(
         '@app.get("/health")\ndef health():\n    return {"ok": True}\n', "api.py", "candidate-5"

@@ -489,3 +489,45 @@ def test_consumed_response_becoming_nullable_is_detected(tmp_path: Path):
 
     assert result["status"] == "conflicts"
     assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_TYPE_MUTATION"]
+
+
+def test_parameterized_route_matches_template_literal_consumer(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "template-route",
+        {
+            "api.py": ('@app.get("/users/{user_id}")\ndef user(user_id: str):\n    return {"credits": 1}\n'),
+            "client.js": (
+                "export async function load(userId) { "
+                "const data = await (await fetch(`/users/${userId}`)).json(); return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {"api.py": ('@app.get("/users/{user_id}")\ndef user(user_id: str):\n    return {"balance": 1}\n')},
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_FIELD_REMOVED"]
+
+
+def test_route_parameter_rename_preserves_endpoint_identity(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "route-parameter-rename",
+        {
+            "api.py": ('@app.get("/users/{user_id}")\ndef user(user_id: str):\n    return {"credits": 1}\n'),
+            "client.js": (
+                "export async function load(userId) { "
+                "const data = await (await fetch(`/users/${userId}`)).json(); return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {"api.py": '@app.get("/users/{id}")\ndef user(id: str):\n    return {"credits": 1}\n'},
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+    assert result["conflicts"] == []

@@ -320,7 +320,7 @@ def extract_javascript_consumers(
     source: str, path: str, snapshot_id: str
 ) -> tuple[list[ConsumerContract], CoverageRecord]:
     calls: list[tuple[str, str, int, tuple[FieldContract, ...], tuple[str, ...]]] = []
-    for call in re.finditer(r"fetch\s*\(\s*(['\"])([^'\"]+)\1", source):
+    for call in re.finditer(r"fetch\s*\(\s*(['\"`])(.+?)\1", source, re.DOTALL):
         depth = 1
         quote: str | None = None
         escaped = False

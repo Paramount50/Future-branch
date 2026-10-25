@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detect newly required query and body parameters when literal caller evidence proves the field is absent; dynamic request bodies remain unclassified to avoid false positives.
 - Detect consumed response fields whose normalized JSON wire type, presence guarantee, or nullability becomes incompatible.
 - Add SARIF 2.1.0 output for CI code-scanning ingestion, including stable rule IDs, source locations, ownership, remediation, and incomplete-coverage warnings.
+- Match parameterized provider routes against literal and JavaScript template-literal consumers without treating route-parameter renames as endpoint deletion.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.

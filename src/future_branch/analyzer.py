@@ -152,8 +152,35 @@ def _endpoint_paths(contracts: dict[str, set[str] | str]) -> set[str]:
 
 def _matching_endpoint(endpoint: EndpointContract, candidates: list[EndpointContract]) -> EndpointContract | None:
     if endpoint.identity is not None:
-        return next((candidate for candidate in candidates if candidate.identity == endpoint.identity), None)
+        return next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.method == endpoint.method
+                and candidate.path is not None
+                and endpoint.path is not None
+                and _paths_match(endpoint.path, candidate.path)
+            ),
+            None,
+        )
     return next((candidate for candidate in candidates if candidate.identity is None), None)
+
+
+def _paths_match(provider_path: str, consumer_path: str) -> bool:
+    def segments(path: str) -> list[str]:
+        stripped = path.split("?", 1)[0].strip("/")
+        return [] if not stripped else stripped.split("/")
+
+    provider_parts = segments(provider_path)
+    consumer_parts = segments(consumer_path)
+    if len(provider_parts) != len(consumer_parts):
+        return False
+    return all(
+        provider == consumer
+        or (provider.startswith("{") and provider.endswith("}"))
+        or (consumer.startswith("${") and consumer.endswith("}"))
+        for provider, consumer in zip(provider_parts, consumer_parts, strict=True)
+    )
 
 
 def _consumer_matches(endpoint: EndpointContract, consumer: ConsumerContract) -> bool:
@@ -163,7 +190,7 @@ def _consumer_matches(endpoint: EndpointContract, consumer: ConsumerContract) ->
         return False
     endpoint_method, endpoint_path = endpoint.identity
     consumer_method, consumer_path = consumer.identity
-    return endpoint_path == consumer_path and consumer_method in {endpoint_method, "ANY"}
+    return _paths_match(endpoint_path, consumer_path) and consumer_method in {endpoint_method, "ANY"}
 
 
 def _wire_type(type_repr: str) -> str | None:
@@ -271,7 +298,10 @@ class BranchAnalyzer:
                     replacement_methods = sorted(
                         endpoint.method
                         for endpoint in new_endpoints
-                        if endpoint.path == old_endpoint.path and endpoint.method != old_endpoint.method
+                        if endpoint.path is not None
+                        and old_endpoint.path is not None
+                        and _paths_match(old_endpoint.path, endpoint.path)
+                        and endpoint.method != old_endpoint.method
                     )
                     for consumer in matching_consumers:
                         consumer_path = consumer.source.path

@@ -144,6 +144,7 @@ Future Branch is focused on fast, offline static analysis:
 - **Conflicted Candidates:** Rehearsal records the first textual conflict and reports semantic coverage as incomplete rather than inventing an `ours` or `theirs` resolution.
 - **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.
 - **Linkage Coverage:** Consumers without a resolved endpoint and files with multiple fetch calls are preserved as partial evidence and make the rehearsal `incomplete` when Python contracts changed.
+- **Parameterized Routes:** FastAPI-style `{parameter}` paths match concrete and JavaScript template-literal caller segments; query strings are normalized separately.
 - **Pairwise Scale:** Pairwise diagnostics are capped at 500 checks. Larger branch sets still build the ordered candidate but return `incomplete` because the matrix was skipped.
 
 ---
