@@ -531,3 +531,34 @@ def test_route_parameter_rename_preserves_endpoint_identity(tmp_path: Path):
 
     assert result["status"] == "clean"
     assert result["conflicts"] == []
+
+
+def test_fastapi_response_model_field_removal_is_detected(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "response-model-removal",
+        {
+            "api.py": (
+                "class Profile:\n    name: str\n    credits: int\n\n"
+                '@app.get("/profile", response_model=Profile)\n'
+                "def profile():\n    return service.load_profile()\n"
+            ),
+            "client.js": (
+                'export async function load() { const data = await (await fetch("/profile")).json(); '
+                "return data.credits; }\n"
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                "class Profile:\n    name: str\n\n"
+                '@app.get("/profile", response_model=Profile)\n'
+                "def profile():\n    return service.load_profile()\n"
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_FIELD_REMOVED"]

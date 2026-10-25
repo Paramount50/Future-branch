@@ -65,6 +65,28 @@ def billing():
     assert by_path["/billing"] == {"plan"}
 
 
+def test_fastapi_response_model_and_inherited_fields_are_extracted():
+    source = """
+from pydantic import BaseModel
+
+class Entity(BaseModel):
+    id: str
+
+class Profile(Entity):
+    credits: int
+
+@app.get("/profile", response_model=Profile)
+def profile():
+    return service.load_profile()
+"""
+
+    endpoints, coverage = extract_python_endpoints(source, "api.py", "candidate-response-model")
+
+    assert coverage.status == "supported"
+    assert len(endpoints) == 1
+    assert {field.name for field in endpoints[0].response_fields} == {"id", "credits"}
+
+
 def test_python_syntax_error_is_coverage_error():
     endpoints, coverage = extract_python_endpoints("def broken(:\n", "broken.py", "candidate-3")
 

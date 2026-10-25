@@ -146,10 +146,12 @@ def _is_required(node: ast.AnnAssign) -> bool:
 
 
 def _class_fields(tree: ast.AST) -> dict[str, tuple[FieldContract, ...]]:
-    models: dict[str, tuple[FieldContract, ...]] = {}
+    direct: dict[str, tuple[FieldContract, ...]] = {}
+    bases: dict[str, tuple[str, ...]] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
+        bases[node.name] = tuple(base.id for base in node.bases if isinstance(base, ast.Name))
         fields: list[FieldContract] = []
         for child in node.body:
             if not isinstance(child, ast.AnnAssign) or not isinstance(child.target, ast.Name):
@@ -167,7 +169,31 @@ def _class_fields(tree: ast.AST) -> dict[str, tuple[FieldContract, ...]]:
                 )
             )
         if fields:
-            models[node.name] = tuple(fields)
+            direct[node.name] = tuple(fields)
+
+    models: dict[str, tuple[FieldContract, ...]] = {}
+
+    def resolve(name: str, visiting: frozenset[str] = frozenset()) -> tuple[FieldContract, ...]:
+        if name in models:
+            return models[name]
+        if name in visiting:
+            return direct.get(name, ())
+        by_name: dict[str, FieldContract] = {}
+        for base_name in bases.get(name, ()):
+            for inherited in resolve(base_name, visiting | {name}):
+                by_name[inherited.name] = inherited
+        for declared in direct.get(name, ()):
+            for inherited_name, inherited in tuple(by_name.items()):
+                if inherited.declared_name == declared.declared_name:
+                    by_name.pop(inherited_name)
+            by_name[declared.name] = declared
+        resolved = tuple(by_name.values())
+        if resolved:
+            models[name] = resolved
+        return resolved
+
+    for model_name in bases:
+        resolve(model_name)
     return models
 
 
@@ -184,6 +210,18 @@ def _route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[str, str] | No
             continue
         return decorator.func.attr.upper(), decorator.args[0].value
     return None
+
+
+def _declared_response_fields(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, models: dict[str, tuple[FieldContract, ...]]
+) -> tuple[FieldContract, ...]:
+    for decorator in node.decorator_list:
+        if not isinstance(decorator, ast.Call):
+            continue
+        for keyword in decorator.keywords:
+            if keyword.arg == "response_model" and isinstance(keyword.value, ast.Name):
+                return models.get(keyword.value.id, ())
+    return ()
 
 
 def _request_fields(
@@ -257,7 +295,7 @@ def extract_python_endpoints(source: str, path: str, snapshot_id: str) -> tuple[
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        response_fields = _returned_fields(node, models)
+        response_fields = _returned_fields(node, models) or _declared_response_fields(node, models)
         route = _route(node)
         if route is None:
             for response_field in response_fields:
