@@ -2,12 +2,47 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from git import Repo
+
 from future_branch.analyzer import (
     ConflictResult,
     _js_contracts,
     _python_contracts,
     analyze_repository,
 )
+
+
+def _candidate_repo(
+    root: Path,
+    base_files: dict[str, str],
+    branch_a_files: dict[str, str | None],
+    branch_b_files: dict[str, str | None],
+) -> Path:
+    root.mkdir()
+    repo = Repo.init(str(root), initial_branch="main")
+    repo.config_writer().set_value("user", "name", "Test Runner").release()
+    repo.config_writer().set_value("user", "email", "test@example.com").release()
+
+    def commit(files: dict[str, str | None], message: str) -> None:
+        for relative, content in files.items():
+            path = root / relative
+            if content is None:
+                path.unlink()
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+        repo.git.add(all=True)
+        repo.index.commit(message)
+
+    commit(base_files, "base")
+    repo.git.checkout("-b", "branch-a")
+    commit(branch_a_files, "branch a")
+    repo.git.checkout("main")
+    repo.git.checkout("-b", "branch-b")
+    commit(branch_b_files, "branch b")
+    repo.git.checkout("main")
+    repo.close()
+    return root
 
 
 def test_python_contracts_class_fields():
@@ -109,3 +144,120 @@ def test_conflict_result_to_dict():
     assert d["path"] == "app.py"
     assert d["kind"] == "semantic"
     assert d["severity"] == "error"
+
+
+def test_analyzes_coordinated_merged_state(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "coordinated",
+        {
+            "api.py": 'def payload():\n    return {"credits": 1}\n',
+            "client.js": "export function view(profile) { return profile.credits; }\n",
+            "README.md": "base\n",
+        },
+        {
+            "api.py": 'def payload():\n    return {"balance": 1}\n',
+            "client.js": "export function view(profile) { return profile.balance; }\n",
+        },
+        {"README.md": "unrelated edit\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+    assert result["candidate_ref"]
+    assert result["candidate_tree"]
+
+
+def test_deleted_provider_is_not_reported_clean(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "deleted-provider",
+        {"api.py": 'def payload():\n    return {"credits": 1}\n', "README.md": "base\n"},
+        {"api.py": None},
+        {"client.js": "export function view(profile) { return profile.credits; }\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert "credits" in result["conflicts"][0]["description"]
+
+
+def test_unchanged_consumers_are_checked(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "unchanged-consumer",
+        {
+            "api.py": 'def payload():\n    return {"credits": 1}\n',
+            "client.js": "export function view(profile) { return profile.credits; }\n",
+            "README.md": "base\n",
+        },
+        {"api.py": 'def payload():\n    return {"balance": 1}\n'},
+        {"README.md": "unrelated edit\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert result["conflicts"][0]["owner_consumer"] == "base"
+
+
+def test_logs_are_not_response_fields(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "log-string",
+        {"api.py": 'def payload():\n    print("credits")\n    return {"name": "Ada"}\n'},
+        {"api.py": 'def payload():\n    return {"name": "Ada"}\n'},
+        {"client.js": "export function view(profile) { return profile.credits; }\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+
+
+def test_endpoint_identity_prevents_field_name_collision(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "endpoint-identity",
+        {"api.py": '@app.get("/profile")\ndef payload():\n    return {"credits": 1}\n'},
+        {"api.py": '@app.get("/profile")\ndef payload():\n    return {"balance": 1}\n'},
+        {
+            "client.js": (
+                'export async function view() { const data = await (await fetch("/billing")).json(); '
+                "return data.credits; }\n"
+            )
+        },
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+
+
+def test_parse_failure_marks_analysis_incomplete(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "parse-failure",
+        {"README.md": "base\n"},
+        {"broken.py": "def broken(:\n"},
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "incomplete"
+    assert any("broken.py" in reason for reason in result["incomplete_reasons"])
+
+
+def test_destructured_consumer_is_checked(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "destructured",
+        {"api.py": '@app.get("/profile")\ndef payload():\n    return {"credits": 1}\n'},
+        {"api.py": '@app.get("/profile")\ndef payload():\n    return {"balance": 1}\n'},
+        {
+            "client.js": (
+                'export async function view() { const { credits } = await (await fetch("/profile")).json(); '
+                "return credits; }\n"
+            )
+        },
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"

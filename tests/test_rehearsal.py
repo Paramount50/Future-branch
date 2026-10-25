@@ -8,15 +8,19 @@ from future_branch.rehearsal import rehearse_merges
 
 
 def test_merge_conflict_detected(merge_conflict_repo: Path):
-    conflicts = rehearse_merges(merge_conflict_repo, "main", ["branch-a", "branch-b"])
-    assert len(conflicts) > 0
-    assert any(c.kind == "merge" for c in conflicts)
-    assert any("file.txt" in c.path for c in conflicts)
+    rehearsal = rehearse_merges(merge_conflict_repo, "main", ["branch-a", "branch-b"])
+    assert len(rehearsal) > 0
+    assert any(c.kind == "merge" for c in rehearsal)
+    assert any("file.txt" in c.path for c in rehearsal)
+    assert rehearsal.candidate_ref is None
+    assert rehearsal.incomplete_reasons
 
 
 def test_clean_sequential_merge(clean_repo: Path):
-    conflicts = rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"])
-    assert len(conflicts) == 0
+    rehearsal = rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"])
+    assert len(rehearsal) == 0
+    assert rehearsal.candidate_ref
+    assert rehearsal.candidate_tree
 
 
 def test_source_repo_untouched(demo_repo: Path):
