@@ -146,6 +146,7 @@ def rehearse_merges(repo_path: Path, base: str, branches: list[str]) -> Rehearsa
                         owner_changed=branch,
                         owner_consumer=integrated[-1] if integrated else base,
                         evidence=[output.strip()],
+                        code="ERR_GIT_MERGE",
                     )
                 )
             result.candidate_ref = None

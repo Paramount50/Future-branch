@@ -310,7 +310,35 @@ def extract_python_endpoints(source: str, path: str, snapshot_id: str) -> tuple[
 def extract_javascript_consumers(
     source: str, path: str, snapshot_id: str
 ) -> tuple[list[ConsumerContract], CoverageRecord]:
-    calls = list(re.finditer(r"fetch\s*\(\s*['\"]([^'\"]+)", source))
+    calls: list[tuple[str, str, int]] = []
+    for call in re.finditer(r"fetch\s*\(\s*(['\"])([^'\"]+)\1", source):
+        depth = 1
+        quote: str | None = None
+        escaped = False
+        end = len(source)
+        for index in range(call.end(), len(source)):
+            char = source[index]
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in {'"', "'", "`"}:
+                quote = char
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    end = index
+                    break
+        options = source[call.end() : end]
+        method_match = re.search(r"\bmethod\s*:\s*['\"]([A-Za-z]+)['\"]", options)
+        method = method_match.group(1).upper() if method_match else "GET"
+        calls.append((call.group(2), method, call.start()))
     field_lines: dict[str, int] = {}
     for match in re.finditer(r"\b(?:response|res|data|profile|user)\s*\.\s*([A-Za-z_$][\w$]*)", source):
         name = match.group(1)
@@ -326,15 +354,15 @@ def extract_javascript_consumers(
     )
     consumers = [
         ConsumerContract(
-            method="GET",
-            target_endpoint=call.group(1),
+            method=method,
+            target_endpoint=target,
             request_fields=(),
             response_fields=response_fields,
-            source=SourceLocation(path=path, line=source.count("\n", 0, call.start()) + 1),
+            source=SourceLocation(path=path, line=source.count("\n", 0, offset) + 1),
             snapshot_id=snapshot_id,
             confidence=0.7 if len(calls) == 1 else 0.45,
         )
-        for call in calls
+        for target, method, offset in calls
     ]
     if not calls and response_fields:
         first_field = min((field.source_line for field in response_fields), default=1)

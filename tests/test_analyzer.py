@@ -265,3 +265,48 @@ def test_destructured_consumer_is_checked(tmp_path: Path):
     result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
 
     assert result["status"] == "conflicts"
+
+
+def test_removed_endpoint_is_detected_without_response_field_access(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "removed-endpoint",
+        {"api.py": '@app.get("/profile")\ndef profile():\n    return {"credits": 1}\n'},
+        {"api.py": None},
+        {"client.js": 'export async function load() { await fetch("/profile"); }\n'},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_ENDPOINT_REMOVED"]
+
+
+def test_http_method_change_is_detected(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "method-mismatch",
+        {"api.py": '@app.post("/profile")\ndef profile():\n    return {"ok": True}\n'},
+        {"api.py": '@app.put("/profile")\ndef profile():\n    return {"ok": True}\n'},
+        {"client.js": ('export async function save() { await fetch("/profile", { method: "POST" }); }\n')},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "conflicts"
+    assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_METHOD_MISMATCH"]
+
+
+def test_coordinated_http_method_change_is_clean(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "coordinated-method",
+        {
+            "api.py": '@app.post("/profile")\ndef profile():\n    return {"ok": True}\n',
+            "client.js": 'export async function save() { await fetch("/profile", { method: "POST" }); }\n',
+        },
+        {"api.py": '@app.put("/profile")\ndef profile():\n    return {"ok": True}\n'},
+        {"client.js": 'export async function save() { await fetch("/profile", { method: "PUT" }); }\n'},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "clean"
+    assert result["conflicts"] == []

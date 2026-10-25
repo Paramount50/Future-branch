@@ -94,6 +94,21 @@ export async function load() {
     assert consumer.response_fields[0].source_line == 4
 
 
+def test_javascript_fetch_method_is_extracted():
+    source = """
+await fetch('/users', {
+  method: 'POST',
+  body: JSON.stringify({ name: 'Ada' }),
+});
+"""
+
+    consumers, coverage = extract_javascript_consumers(source, "client.ts", "candidate-method")
+
+    assert coverage.status == "supported"
+    assert len(consumers) == 1
+    assert consumers[0].identity == ("POST", "/users")
+
+
 def test_inventory_serializes_versioned_records():
     endpoints, python_coverage = extract_python_endpoints(
         '@app.get("/health")\ndef health():\n    return {"ok": True}\n', "api.py", "candidate-5"

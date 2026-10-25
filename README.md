@@ -32,6 +32,7 @@ Future Branch rehearses the merge ahead of time and surfaces cross-branch contra
 - 🧭 **Pairwise Attribution:** Emits a bounded branch-pair merge matrix alongside the authoritative ordered candidate.
 - 🔍 **Static Contract Analysis:** Uses Python AST traversal and JS/TS pattern matching to detect function signature drifts, removed schema fields, and broken route endpoints.
 - 🧾 **Versioned Contract Evidence:** Emits a language-neutral contract inventory with endpoint identity, requiredness, nullability, source locations, extractor confidence, and snapshot provenance.
+- 🔁 **Bidirectional Endpoint Checks:** Detects stale callers after endpoint deletion, HTTP method changes, and response-field removal with stable machine-readable conflict codes.
 - 📊 **Self-Contained Dark HTML Report:** Generates an incident report with side-by-side contract diffs, evidence traces, and actionable interventions.
 - ⚡ **Zero External Heavy Dependencies:** Pure Python + Git operations. No LLM APIs, no build pipelines, no runtime execution of untrusted code.
 - 🚦 **CI/CD Ready:** Returns exit code `0` on clean rehearsals and `1` on conflicts for seamless integration into CI gates.

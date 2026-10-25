@@ -33,6 +33,7 @@ class ConflictResult:
     owner_changed: str = ""
     owner_consumer: str = ""
     evidence: list[str] = field(default_factory=list)
+    code: str = "ERR_SEMANTIC"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -224,6 +225,60 @@ class BranchAnalyzer:
             producer_owners = [name for name, changed in changes_by_branch.items() if path in changed]
             for old_endpoint in old_endpoints:
                 new_endpoint = _matching_endpoint(old_endpoint, new_endpoints)
+                matching_consumers = [
+                    consumer for consumer in inventory.consumers if _consumer_matches(old_endpoint, consumer)
+                ]
+                if old_endpoint.identity is not None and new_endpoint is None:
+                    replacement_methods = sorted(
+                        endpoint.method
+                        for endpoint in new_endpoints
+                        if endpoint.path == old_endpoint.path and endpoint.method != old_endpoint.method
+                    )
+                    for consumer in matching_consumers:
+                        consumer_path = consumer.source.path
+                        consumer_owners = [
+                            name for name, changed in changes_by_branch.items() if consumer_path in changed
+                        ]
+                        owners = list(dict.fromkeys([*producer_owners, *consumer_owners]))
+                        if replacement_methods:
+                            code = "ERR_METHOD_MISMATCH"
+                            description = (
+                                f"Candidate endpoint {old_endpoint.path!r} no longer accepts {old_endpoint.method}; "
+                                f"the candidate consumer still sends {consumer.method}."
+                            )
+                            suggested_fix = (
+                                f"Update the consumer to use {replacement_methods[0]} or preserve the "
+                                f"{old_endpoint.method} route during migration."
+                            )
+                            changed_code = f"{old_endpoint.method} -> {replacement_methods}"
+                        else:
+                            code = "ERR_ENDPOINT_REMOVED"
+                            description = (
+                                f"Candidate endpoint {old_endpoint.method} {old_endpoint.path} was removed, "
+                                "but the candidate consumer still calls it."
+                            )
+                            suggested_fix = "Update the consumer target or preserve the endpoint during migration."
+                            changed_code = f"{old_endpoint.method} {old_endpoint.path} -> removed"
+                        results.append(
+                            ConflictResult(
+                                consumer_path,
+                                owners,
+                                description,
+                                suggested_fix,
+                                changed_code=changed_code,
+                                expected_code=f"{consumer.method} {consumer.target_endpoint}",
+                                owner_changed=producer_owners[0] if producer_owners else "candidate",
+                                owner_consumer=consumer_owners[0] if consumer_owners else "base",
+                                evidence=[
+                                    f"{path}:{old_endpoint.source.line}: provider before candidate",
+                                    f"{consumer_path}:{consumer.source.line}: candidate consumer",
+                                    f"candidate: {candidate.hexsha}",
+                                ],
+                                code=code,
+                            )
+                        )
+                    continue
+
                 old_fields = {field.name: field for field in old_endpoint.response_fields}
                 new_fields = (
                     {field.name: field for field in new_endpoint.response_fields} if new_endpoint is not None else {}
@@ -231,9 +286,7 @@ class BranchAnalyzer:
                 removed = set(old_fields) - set(new_fields)
                 if not removed:
                     continue
-                for consumer in inventory.consumers:
-                    if not _consumer_matches(old_endpoint, consumer):
-                        continue
+                for consumer in matching_consumers:
                     used = {field.name for field in consumer.response_fields}
                     stale = sorted(removed & used)
                     if not stale:
@@ -264,6 +317,7 @@ class BranchAnalyzer:
                                 f"producer confidence: {old_endpoint.confidence:.2f}",
                                 f"consumer confidence: {consumer.confidence:.2f}",
                             ],
+                            code="ERR_FIELD_REMOVED",
                         )
                     )
 
