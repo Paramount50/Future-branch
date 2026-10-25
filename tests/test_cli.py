@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -25,3 +26,25 @@ def test_cli_fewer_than_two_branches_errors(clean_repo: Path):
     with pytest.raises(SystemExit) as exc_info:
         main([str(clean_repo), "feature-a"])
     assert exc_info.value.code != 0
+
+
+def test_cli_json_contains_candidate_snapshot(clean_repo: Path, tmp_path: Path, capsys):
+    report_file = tmp_path / "report.html"
+
+    code = main(
+        [
+            str(clean_repo),
+            "feature-a",
+            "feature-b",
+            "--report",
+            str(report_file),
+            "--format",
+            "json",
+        ]
+    )
+    result = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert result["status"] == "clean"
+    assert result["candidate_ref"]
+    assert result["candidate_tree"]

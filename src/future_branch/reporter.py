@@ -449,9 +449,10 @@ h1 {
 
 def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal") -> str:
     conflicts = result.get("conflicts", [])
+    incomplete_reasons = result.get("incomplete_reasons", [])
     branches = result.get("branches", [])
     status = str(result.get("status", "error")).lower()
-    is_clean = len(conflicts) == 0 and status != "error"
+    is_clean = len(conflicts) == 0 and status == "clean"
 
     cards: list[str] = []
     for item in conflicts:
@@ -525,19 +526,38 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
         </div>
         """)
 
-    body = (
-        "".join(cards)
-        if cards
-        else """
+    if cards:
+        body = "".join(cards)
+    elif status == "incomplete":
+        reasons = "".join(f"<li>{html.escape(str(reason))}</li>" for reason in incomplete_reasons)
+        body = f"""
+    <div class="incident-block">
+      <div class="incident-kind">coverage</div>
+      <h2 class="incident-title">Analysis incomplete</h2>
+      <div class="evidence"><ul>{reasons}</ul></div>
+    </div>
+    """
+    else:
+        body = """
     <div class="clean-block">
       <div class="clean-title">Rehearsal passed</div>
       <div class="clean-desc">No merge conflicts or contract breaks detected across active branches.</div>
     </div>
     """
-    )
+    if incomplete_reasons and status != "incomplete":
+        reasons = "".join(f"<li>{html.escape(str(reason))}</li>" for reason in incomplete_reasons)
+        body += f"""
+    <div class="incident-block">
+      <div class="incident-kind">coverage</div>
+      <h2 class="incident-title">Semantic analysis incomplete</h2>
+      <div class="evidence"><ul>{reasons}</ul></div>
+    </div>
+    """
 
     status_class = "clean" if is_clean else "error"
-    status_label = "REHEARSAL CLEAN" if is_clean else "CONFLICT DETECTED"
+    status_label = (
+        "REHEARSAL CLEAN" if is_clean else "ANALYSIS INCOMPLETE" if status == "incomplete" else "CONFLICT DETECTED"
+    )
 
     branch_tabs = " ".join(f"<span class='terminal-tab'>{html.escape(str(b))}</span>" for b in branches)
 

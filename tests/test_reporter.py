@@ -88,3 +88,19 @@ def test_write_report_creates_file(tmp_path: Path):
     returned_path = write_report(result, output_path)
     assert returned_path.exists()
     assert "REHEARSAL CLEAN" in returned_path.read_text(encoding="utf-8")
+
+
+def test_incomplete_report_does_not_claim_clean():
+    result = {
+        "status": "incomplete",
+        "base": "main",
+        "branches": ["branch-a", "branch-b"],
+        "conflicts": [],
+        "incomplete_reasons": ["Could not parse candidate Python source at broken.py."],
+    }
+
+    rendered = render_report(result)
+
+    assert "ANALYSIS INCOMPLETE" in rendered
+    assert "broken.py" in rendered
+    assert "REHEARSAL CLEAN" not in rendered
