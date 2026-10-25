@@ -73,6 +73,7 @@ future-branch <path-to-repo> <branch-1> <branch-2> [branch-3 ...] [options]
 | `--report` | `incident_report.html` | Path where the HTML incident report will be generated |
 | `--format` | `console` | Standard output format: `console`, machine-readable `json`, or SARIF 2.1.0 `sarif` |
 | `--output` | stdout | Write JSON or SARIF to a file; relative paths resolve inside the analyzed repository |
+| `--max-pairwise-checks` | `500` | Bound quadratic branch-pair diagnostics; the ordered combined candidate is still built when the matrix is skipped |
 
 ### Example
 
@@ -153,7 +154,7 @@ Future Branch is focused on fast, offline static analysis:
 - **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.
 - **Linkage Coverage:** Consumers without a resolved endpoint and files with multiple fetch calls are preserved as partial evidence and make the rehearsal `incomplete` when Python contracts changed.
 - **Parameterized Routes:** FastAPI-style `{parameter}` paths match concrete and JavaScript template-literal caller segments; query strings are normalized separately.
-- **Pairwise Scale:** Pairwise diagnostics are capped at 500 checks. Larger branch sets still build the ordered candidate but return `incomplete` because the matrix was skipped.
+- **Pairwise Scale:** Pairwise diagnostics default to a 500-check cap configurable with `--max-pairwise-checks`. Larger branch sets still build the ordered candidate but return `incomplete` when the matrix is skipped.
 
 ---
 

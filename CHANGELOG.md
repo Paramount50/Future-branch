@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extract FastAPI `response_model` declarations and inherited Pydantic-style fields so service-returning handlers retain response contract coverage.
 - Resolve local FastAPI `APIRouter` and `include_router` prefixes into canonical endpoint paths.
 - Add `--output` for writing JSON or SARIF artifacts directly, with repository-relative path resolution and parent-directory creation.
+- Add `--max-pairwise-checks` so CI and agent orchestrators can choose an explicit bound for quadratic merge diagnostics.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.

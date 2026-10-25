@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from future_branch.analyzer import analyze_repository
-from future_branch.rehearsal import rehearse_merges
+from future_branch.rehearsal import MAX_PAIRWISE_CHECKS, rehearse_merges
 from future_branch.reporter import write_report
 from future_branch.sarif import to_sarif
 
@@ -36,6 +36,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="write json or sarif output to this path instead of stdout",
     )
+    parser.add_argument(
+        "--max-pairwise-checks",
+        type=int,
+        default=MAX_PAIRWISE_CHECKS,
+        help=f"maximum branch-pair merge checks (default: {MAX_PAIRWISE_CHECKS})",
+    )
     return parser
 
 
@@ -46,12 +52,19 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("at least two branch names are required")
     if args.output and args.format == "console":
         parser.error("--output requires --format json or --format sarif")
+    if args.max_pairwise_checks < 0:
+        parser.error("--max-pairwise-checks must be zero or greater")
     repo_path = Path(args.repo).resolve()
     report_path = Path(args.report)
     if not report_path.is_absolute():
         report_path = repo_path / report_path
     try:
-        rehearsal = rehearse_merges(repo_path, args.base, args.branches)
+        rehearsal = rehearse_merges(
+            repo_path,
+            args.base,
+            args.branches,
+            max_pairwise_checks=args.max_pairwise_checks,
+        )
         result = analyze_repository(
             repo_path,
             args.base,

@@ -88,8 +88,16 @@ def _conflict_paths(output: str) -> list[str]:
     return paths or ["(merge state)"]
 
 
-def rehearse_merges(repo_path: Path, base: str, branches: list[str]) -> RehearsalResult:
+def rehearse_merges(
+    repo_path: Path,
+    base: str,
+    branches: list[str],
+    max_pairwise_checks: int | None = None,
+) -> RehearsalResult:
     """Build the requested candidate without changing refs, the index, or a worktree."""
+    pairwise_limit = MAX_PAIRWISE_CHECKS if max_pairwise_checks is None else max_pairwise_checks
+    if pairwise_limit < 0:
+        raise ValueError("max_pairwise_checks must be zero or greater")
     repo_path = Path(repo_path).resolve()
     source = Repo(str(repo_path))
     try:
@@ -102,9 +110,9 @@ def rehearse_merges(repo_path: Path, base: str, branches: list[str]) -> Rehearsa
 
     result = RehearsalResult(candidate_ref=current_ref, candidate_tree=current_tree)
     pair_count = len(branch_refs) * (len(branch_refs) - 1) // 2
-    if pair_count > MAX_PAIRWISE_CHECKS:
+    if pair_count > pairwise_limit:
         result.incomplete_reasons.append(
-            f"Skipped {pair_count} pairwise checks because the limit is {MAX_PAIRWISE_CHECKS}; "
+            f"Skipped {pair_count} pairwise checks because the limit is {pairwise_limit}; "
             "the ordered candidate was still rehearsed."
         )
     else:

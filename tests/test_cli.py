@@ -109,3 +109,10 @@ def test_cli_rejects_output_with_console_format(clean_repo: Path):
         main([str(clean_repo), "feature-a", "feature-b", "--output", "result.json"])
 
     assert exc_info.value.code != 0
+
+
+def test_cli_rejects_negative_pairwise_limit(clean_repo: Path):
+    with pytest.raises(SystemExit) as exc_info:
+        main([str(clean_repo), "feature-a", "feature-b", "--max-pairwise-checks", "-1"])
+
+    assert exc_info.value.code != 0

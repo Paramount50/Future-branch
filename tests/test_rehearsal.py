@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from git import Repo
 
 from future_branch.rehearsal import MAX_PAIRWISE_CHECKS, rehearse_merges
@@ -53,12 +54,15 @@ def test_pairwise_matrix_attributes_conflict(merge_conflict_repo: Path):
     assert "file.txt" in check.conflict_paths
 
 
-def test_pairwise_limit_does_not_block_ordered_candidate(clean_repo: Path, monkeypatch):
-    monkeypatch.setattr("future_branch.rehearsal.MAX_PAIRWISE_CHECKS", 0)
-
-    rehearsal = rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"])
+def test_pairwise_limit_does_not_block_ordered_candidate(clean_repo: Path):
+    rehearsal = rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"], max_pairwise_checks=0)
 
     assert MAX_PAIRWISE_CHECKS > 0
     assert rehearsal.pairwise_checks == []
     assert rehearsal.candidate_ref
     assert any("pairwise checks" in reason for reason in rehearsal.incomplete_reasons)
+
+
+def test_negative_pairwise_limit_is_rejected(clean_repo: Path):
+    with pytest.raises(ValueError, match="zero or greater"):
+        rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"], max_pairwise_checks=-1)
