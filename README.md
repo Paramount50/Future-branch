@@ -71,7 +71,7 @@ future-branch <path-to-repo> <branch-1> <branch-2> [branch-3 ...] [options]
 | `<branches...>` | *(required)* | Two or more branch names to merge sequentially |
 | `--base` | `main` | Base branch to rehearse against |
 | `--report` | `incident_report.html` | Path where the HTML incident report will be generated |
-| `--format` | `console` | Standard output format: `console` or machine-readable `json` |
+| `--format` | `console` | Standard output format: `console`, machine-readable `json`, or SARIF 2.1.0 `sarif` |
 
 ### Example
 

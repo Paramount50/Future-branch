@@ -10,6 +10,7 @@ from pathlib import Path
 from future_branch.analyzer import analyze_repository
 from future_branch.rehearsal import rehearse_merges
 from future_branch.reporter import write_report
+from future_branch.sarif import to_sarif
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,9 +28,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--format",
-        choices=("console", "json"),
+        choices=("console", "json", "sarif"),
         default="console",
-        help="stdout format (default: console)",
+        help="stdout format: console, json, or sarif (default: console)",
     )
     return parser
 
@@ -68,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.format == "json":
         print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if status == "clean" else 1
+    if args.format == "sarif":
+        print(json.dumps(to_sarif(result), indent=2, sort_keys=True))
         return 0 if status == "clean" else 1
 
     # ANSI escape codes for coloring

@@ -57,3 +57,25 @@ def test_cli_json_contains_candidate_snapshot(clean_repo: Path, tmp_path: Path, 
             "status": "clean",
         }
     ]
+
+
+def test_cli_sarif_contains_clean_run(clean_repo: Path, tmp_path: Path, capsys):
+    report_file = tmp_path / "report.html"
+
+    code = main(
+        [
+            str(clean_repo),
+            "feature-a",
+            "feature-b",
+            "--report",
+            str(report_file),
+            "--format",
+            "sarif",
+        ]
+    )
+    sarif = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert sarif["version"] == "2.1.0"
+    assert sarif["runs"][0]["results"] == []
+    assert sarif["runs"][0]["properties"]["status"] == "clean"
