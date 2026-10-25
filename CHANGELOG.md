@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use known endpoint paths to avoid matching identical field names across unrelated routes.
 - Emit a versioned contract inventory with endpoint identities, request/response fields, independent required/nullable flags, source evidence, confidence, and snapshot provenance.
 - Surface unresolved producer or consumer linkage as incomplete coverage instead of silently treating heuristic evidence as complete.
+- Emit a branch-pair merge matrix for conflict attribution, capped at 500 checks to bound quadratic work while preserving ordered candidate construction.
 
 ### Fixed
 - Coordinated producer/consumer changes no longer report stale branch-tip conflicts.

@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
             candidate_ref=rehearsal.candidate_ref,
             candidate_tree=rehearsal.candidate_tree,
             incomplete_reasons=rehearsal.incomplete_reasons,
+            pairwise_checks=[check.to_dict() for check in rehearsal.pairwise_checks],
         )
     except Exception as exc:
         result = {

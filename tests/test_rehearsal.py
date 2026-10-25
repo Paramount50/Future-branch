@@ -4,7 +4,7 @@ from pathlib import Path
 
 from git import Repo
 
-from future_branch.rehearsal import rehearse_merges
+from future_branch.rehearsal import MAX_PAIRWISE_CHECKS, rehearse_merges
 
 
 def test_merge_conflict_detected(merge_conflict_repo: Path):
@@ -21,6 +21,7 @@ def test_clean_sequential_merge(clean_repo: Path):
     assert len(rehearsal) == 0
     assert rehearsal.candidate_ref
     assert rehearsal.candidate_tree
+    assert [check.status for check in rehearsal.pairwise_checks] == ["clean"]
 
 
 def test_source_repo_untouched(demo_repo: Path):
@@ -40,3 +41,24 @@ def test_source_repo_untouched(demo_repo: Path):
     assert initial_branches == branches_after
     assert "future-main" not in branches_after
     assert initial_head_sha == head_sha_after
+
+
+def test_pairwise_matrix_attributes_conflict(merge_conflict_repo: Path):
+    rehearsal = rehearse_merges(merge_conflict_repo, "main", ["branch-a", "branch-b"])
+
+    assert len(rehearsal.pairwise_checks) == 1
+    check = rehearsal.pairwise_checks[0]
+    assert (check.left, check.right) == ("branch-a", "branch-b")
+    assert check.status == "conflict"
+    assert "file.txt" in check.conflict_paths
+
+
+def test_pairwise_limit_does_not_block_ordered_candidate(clean_repo: Path, monkeypatch):
+    monkeypatch.setattr("future_branch.rehearsal.MAX_PAIRWISE_CHECKS", 0)
+
+    rehearsal = rehearse_merges(clean_repo, "main", ["feature-a", "feature-b"])
+
+    assert MAX_PAIRWISE_CHECKS > 0
+    assert rehearsal.pairwise_checks == []
+    assert rehearsal.candidate_ref
+    assert any("pairwise checks" in reason for reason in rehearsal.incomplete_reasons)

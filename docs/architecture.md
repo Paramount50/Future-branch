@@ -34,6 +34,7 @@ flowchart TD
     
     subgraph RehearsalPhase ["Rehearsal Engine (rehearsal.py)"]
         MergeTree --> SeqMerge["Sequentially build immutable candidate commits"]
+        MergeTree --> Pairwise["Build bounded branch-pair diagnostic matrix"]
         SeqMerge -->|Merge Conflict| TextualConflict["Capture Conflict Markers<br>kind: 'merge'"]
         SeqMerge -->|Clean Merge| CleanMerge["Proceed to Semantic Phase"]
     end
@@ -64,7 +65,7 @@ flowchart TD
 | Module | Role | Key Responsibilities |
 |:---|:---|:---|
 | `future_branch.cli` | User Entry Point | CLI parsing, path resolution, ANSI terminal formatting, exit code management. |
-| `future_branch.rehearsal` | Git Candidate Engine | Pins commit IDs, builds sequential object trees, records merge conflicts, and returns immutable candidate identifiers. |
+| `future_branch.rehearsal` | Git Candidate Engine | Pins commit IDs, builds sequential object trees, records merge conflicts, emits a capped pairwise diagnostic matrix, and returns immutable candidate identifiers. |
 | `future_branch.analyzer` | Static Contract Analysis | Python AST traversal, JS/TS contract extraction, cross-branch schema & signature difference matching. |
 | `future_branch.reporter` | Incident Visualizer | Standalone responsive dark-themed HTML report generation with evidence traces and suggested interventions. |
 
@@ -106,3 +107,4 @@ Future Branch is intentionally focused and offline. The current analyzer has spe
 2. **Python Schema Frameworks**: Introspects standard dataclasses and class attributes; explicit Pydantic v2 `BaseModel` field validators, `TypedDict`, and SQLAlchemy column definitions are planned enhancements.
 3. **Conflicted Candidates**: Rehearsal stops candidate construction at the first textual conflict. It preserves the conflict and marks merge-dependent semantic coverage incomplete instead of selecting a synthetic resolution.
 4. **Dynamic Runtime Evaluation**: Contracts constructed entirely dynamically at runtime (e.g., dynamic `setattr` or dictionary unpacking) cannot be verified statically.
+5. **Pairwise Scale**: The branch-pair matrix is diagnostic and capped at 500 merge checks. The explicitly ordered combined candidate remains the authoritative snapshot.

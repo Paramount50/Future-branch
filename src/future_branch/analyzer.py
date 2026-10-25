@@ -290,6 +290,7 @@ class BranchAnalyzer:
         candidate_ref: str | None = None,
         candidate_tree: str | None = None,
         incomplete_reasons: Iterable[str] = (),
+        pairwise_checks: Iterable[dict[str, Any]] = (),
     ) -> dict[str, Any]:
         incomplete = list(incomplete_reasons)
         try:
@@ -304,6 +305,7 @@ class BranchAnalyzer:
                 candidate_ref = rehearsal.candidate_ref
                 candidate_tree = rehearsal.candidate_tree
                 incomplete.extend(rehearsal.incomplete_reasons)
+                pairwise_checks = [check.to_dict() for check in rehearsal.pairwise_checks]
 
             conflicts = list(merge_conflicts)
             inventory: ContractInventory | None = None
@@ -323,6 +325,7 @@ class BranchAnalyzer:
                 "candidate_tree": candidate_tree,
                 "conflicts": [x.to_dict() for x in conflicts],
                 "incomplete_reasons": incomplete,
+                "pairwise_checks": list(pairwise_checks),
                 "contracts": inventory.to_dict() if inventory is not None else None,
             }
         except Exception as exc:
@@ -337,6 +340,7 @@ def analyze_repository(
     candidate_ref: str | None = None,
     candidate_tree: str | None = None,
     incomplete_reasons: Iterable[str] = (),
+    pairwise_checks: Iterable[dict[str, Any]] = (),
 ) -> dict[str, Any]:
     analyzer = BranchAnalyzer(repo_path)
     try:
@@ -347,6 +351,7 @@ def analyze_repository(
             candidate_ref=candidate_ref,
             candidate_tree=candidate_tree,
             incomplete_reasons=incomplete_reasons,
+            pairwise_checks=pairwise_checks,
         )
     finally:
         analyzer.repo.close()

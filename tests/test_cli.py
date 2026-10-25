@@ -48,3 +48,12 @@ def test_cli_json_contains_candidate_snapshot(clean_repo: Path, tmp_path: Path, 
     assert result["status"] == "clean"
     assert result["candidate_ref"]
     assert result["candidate_tree"]
+    assert result["pairwise_checks"] == [
+        {
+            "conflict_paths": [],
+            "detail": None,
+            "left": "feature-a",
+            "right": "feature-b",
+            "status": "clean",
+        }
+    ]

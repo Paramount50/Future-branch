@@ -29,6 +29,7 @@ Future Branch rehearses the merge ahead of time and surfaces cross-branch contra
 ## Features
 
 - 🛡️ **Immutable Git Rehearsal:** Builds the exact sequential candidate with `git merge-tree` without touching your working tree, index, or source branches.
+- 🧭 **Pairwise Attribution:** Emits a bounded branch-pair merge matrix alongside the authoritative ordered candidate.
 - 🔍 **Static Contract Analysis:** Uses Python AST traversal and JS/TS pattern matching to detect function signature drifts, removed schema fields, and broken route endpoints.
 - 🧾 **Versioned Contract Evidence:** Emits a language-neutral contract inventory with endpoint identity, requiredness, nullability, source locations, extractor confidence, and snapshot provenance.
 - 📊 **Self-Contained Dark HTML Report:** Generates an incident report with side-by-side contract diffs, evidence traces, and actionable interventions.
@@ -142,6 +143,7 @@ Future Branch is focused on fast, offline static analysis:
 - **Conflicted Candidates:** Rehearsal records the first textual conflict and reports semantic coverage as incomplete rather than inventing an `ours` or `theirs` resolution.
 - **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.
 - **Linkage Coverage:** Consumers without a resolved endpoint and files with multiple fetch calls are preserved as partial evidence and make the rehearsal `incomplete` when Python contracts changed.
+- **Pairwise Scale:** Pairwise diagnostics are capped at 500 checks. Larger branch sets still build the ordered candidate but return `incomplete` because the matrix was skipped.
 
 ---
 

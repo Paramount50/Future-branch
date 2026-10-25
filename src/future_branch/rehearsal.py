@@ -6,11 +6,35 @@ import os
 import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import combinations
 from pathlib import Path
+from typing import Any
 
 from git import Repo
 
 from future_branch.analyzer import ConflictResult
+
+MAX_PAIRWISE_CHECKS = 500
+
+
+@dataclass(frozen=True)
+class PairwiseCheck:
+    """Diagnostic result for a merge between two pinned branch tips."""
+
+    left: str
+    right: str
+    status: str
+    conflict_paths: tuple[str, ...] = ()
+    detail: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "left": self.left,
+            "right": self.right,
+            "status": self.status,
+            "conflict_paths": list(self.conflict_paths),
+            "detail": self.detail,
+        }
 
 
 @dataclass
@@ -21,6 +45,7 @@ class RehearsalResult:
     candidate_ref: str | None = None
     candidate_tree: str | None = None
     incomplete_reasons: list[str] = field(default_factory=list)
+    pairwise_checks: list[PairwiseCheck] = field(default_factory=list)
 
     # Preserve the list-like interface used by the original public helper.
     def __iter__(self) -> Iterator[ConflictResult]:
@@ -68,12 +93,41 @@ def rehearse_merges(repo_path: Path, base: str, branches: list[str]) -> Rehearsa
     repo_path = Path(repo_path).resolve()
     source = Repo(str(repo_path))
     try:
-        current_ref = source.commit(base).hexsha
+        base_commit = source.commit(base)
+        current_ref = base_commit.hexsha
+        current_tree = base_commit.tree.hexsha
         branch_refs = [(branch, source.commit(branch).hexsha) for branch in branches]
     finally:
         source.close()
 
-    result = RehearsalResult(candidate_ref=current_ref, candidate_tree=current_ref)
+    result = RehearsalResult(candidate_ref=current_ref, candidate_tree=current_tree)
+    pair_count = len(branch_refs) * (len(branch_refs) - 1) // 2
+    if pair_count > MAX_PAIRWISE_CHECKS:
+        result.incomplete_reasons.append(
+            f"Skipped {pair_count} pairwise checks because the limit is {MAX_PAIRWISE_CHECKS}; "
+            "the ordered candidate was still rehearsed."
+        )
+    else:
+        for (left, left_ref), (right, right_ref) in combinations(branch_refs, 2):
+            pair = _git(repo_path, "merge-tree", "--write-tree", "--name-only", "--messages", left_ref, right_ref)
+            output = pair.stdout or pair.stderr
+            if pair.returncode == 0:
+                result.pairwise_checks.append(PairwiseCheck(left=left, right=right, status="clean"))
+            elif pair.returncode == 1:
+                result.pairwise_checks.append(
+                    PairwiseCheck(
+                        left=left,
+                        right=right,
+                        status="conflict",
+                        conflict_paths=tuple(_conflict_paths(output)),
+                        detail=output.strip(),
+                    )
+                )
+            else:
+                detail = output.strip() or f"git merge-tree exited with status {pair.returncode}"
+                result.pairwise_checks.append(PairwiseCheck(left=left, right=right, status="error", detail=detail))
+                result.incomplete_reasons.append(f"Pairwise check {left!r} + {right!r} failed: {detail}")
+
     integrated: list[str] = []
     for branch, branch_ref in branch_refs:
         merge = _git(repo_path, "merge-tree", "--write-tree", "--name-only", "--messages", current_ref, branch_ref)
