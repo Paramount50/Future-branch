@@ -9,7 +9,7 @@
 
 > **Individually correct. Collectively broken.** Future Branch catches it before merge.
 
-**Future Branch** is a deterministic, offline pre-merge rehearsal gate for parallel coding branches. It merges branches inside an isolated, disposable Git clone and performs multi-language static contract analysis to catch schema mismatches that Git textual merges cannot see — before anything reaches `main`.
+**Future Branch** is a deterministic, offline pre-merge rehearsal gate for parallel coding branches. It constructs an immutable candidate with native Git object-tree operations and performs multi-language static contract analysis to catch schema mismatches that Git textual merges cannot see — before anything reaches `main`.
 
 ---
 
@@ -28,7 +28,7 @@ Future Branch rehearses the merge ahead of time and surfaces cross-branch contra
 
 ## Features
 
-- 🛡️ **Isolated Git Rehearsal:** Executes sequential test merges in a temporary clone without touching your working tree or source branches.
+- 🛡️ **Immutable Git Rehearsal:** Builds the exact sequential candidate with `git merge-tree` without touching your working tree, index, or source branches.
 - 🔍 **Static Contract Analysis:** Uses Python AST traversal and JS/TS pattern matching to detect function signature drifts, removed schema fields, and broken route endpoints.
 - 📊 **Self-Contained Dark HTML Report:** Generates an incident report with side-by-side contract diffs, evidence traces, and actionable interventions.
 - ⚡ **Zero External Heavy Dependencies:** Pure Python + Git operations. No LLM APIs, no build pipelines, no runtime execution of untrusted code.
@@ -68,6 +68,7 @@ future-branch <path-to-repo> <branch-1> <branch-2> [branch-3 ...] [options]
 | `<branches...>` | *(required)* | Two or more branch names to merge sequentially |
 | `--base` | `main` | Base branch to rehearse against |
 | `--report` | `incident_report.html` | Path where the HTML incident report will be generated |
+| `--format` | `console` | Standard output format: `console` or machine-readable `json` |
 
 ### Example
 
@@ -136,7 +137,8 @@ Future Branch is focused on fast, offline static analysis:
 - **JS/TS Parsing:** Currently uses regex tokenization for property access and fetch endpoints rather than a full TypeScript compiler AST.
 - **Python Schemas:** Introspects standard dataclasses and class attributes; explicit Pydantic v2 `BaseModel` field extraction and SQLAlchemy models are in development.
 - **Dynamic Attributes:** Dynamic runtime evaluation (e.g. `getattr()`, `eval()`, runtime dictionary unpacking) cannot be statically inferred.
-- **Sequential Conflict Stop:** Rehearsal halts on the first Git textual conflict; subsequent branches are not processed until merge markers are resolved.
+- **Conflicted Candidates:** Rehearsal records the first textual conflict and reports semantic coverage as incomplete rather than inventing an `ours` or `theirs` resolution.
+- **Candidate Coverage:** Python syntax failures and unavailable candidate snapshots return an explicit `incomplete` status; exit code `1` prevents an unverified candidate from being reported clean.
 
 ---
 

@@ -29,18 +29,17 @@ Both branches are **individually correct** in isolation, pass their own unit tes
 
 ```mermaid
 flowchart TD
-    CLI["CLI Invocation<br><code>future-branch repo branch-a branch-b ...</code>"] --> Sandbox["1. Sandbox Isolation<br><code>tempfile.TemporaryDirectory</code>"]
-    Sandbox --> Clone["2. Clone & Branch Setup<br><code>git.Repo.clone_from()</code>"]
+    CLI["CLI Invocation<br><code>future-branch repo branch-a branch-b ...</code>"] --> Snapshot["1. Pin Base & Branch Commit IDs"]
+    Snapshot --> MergeTree["2. Build Candidate<br><code>git merge-tree --write-tree</code>"]
     
     subgraph RehearsalPhase ["Rehearsal Engine (rehearsal.py)"]
-        Clone --> VirtualHead["Create temporary <code>future-main</code>"]
-        VirtualHead --> SeqMerge["Sequentially merge branch-a, branch-b..."]
+        MergeTree --> SeqMerge["Sequentially build immutable candidate commits"]
         SeqMerge -->|Merge Conflict| TextualConflict["Capture Conflict Markers<br>kind: 'merge'"]
         SeqMerge -->|Clean Merge| CleanMerge["Proceed to Semantic Phase"]
     end
     
     subgraph AnalyzerPhase ["Static Analysis Engine (analyzer.py)"]
-        CleanMerge --> ASTDiff["Extract contracts across commits"]
+        CleanMerge --> ASTDiff["Compare base with the exact candidate snapshot"]
         ASTDiff --> PyExtractor["Python AST Extractor<br><code>ast.parse</code>: functions, dataclasses, routes, fields"]
         ASTDiff --> JSExtractor["JS/TS Extractor<br>Regex: exports, imports, fetch, property access"]
         PyExtractor --> CrossMatcher["Cross-Branch Contract Matcher"]
@@ -53,8 +52,8 @@ flowchart TD
     
     subgraph OutputPhase ["Reporting & Feedback (reporter.py / cli.py)"]
         Aggregator --> HTMLReport["Self-Contained Dark HTML<br><code>incident_report.html</code>"]
-        Aggregator --> Terminal["ANSI Color-Coded Terminal Summary"]
-        Aggregator --> ExitCode["Exit Code: 0 (Clean) / 1 (Conflict)"]
+        Aggregator --> Terminal["ANSI Console or Structured JSON"]
+        Aggregator --> ExitCode["Exit Code: 0 (Clean) / 1 (Conflict, Incomplete, or Error)"]
     end
 ```
 
@@ -65,7 +64,7 @@ flowchart TD
 | Module | Role | Key Responsibilities |
 |:---|:---|:---|
 | `future_branch.cli` | User Entry Point | CLI parsing, path resolution, ANSI terminal formatting, exit code management. |
-| `future_branch.rehearsal` | Git Sandbox Engine | Disposable clone lifecycle, sequential branch merging, merge conflict interception, handle cleanup. |
+| `future_branch.rehearsal` | Git Candidate Engine | Pins commit IDs, builds sequential object trees, records merge conflicts, and returns immutable candidate identifiers. |
 | `future_branch.analyzer` | Static Contract Analysis | Python AST traversal, JS/TS contract extraction, cross-branch schema & signature difference matching. |
 | `future_branch.reporter` | Incident Visualizer | Standalone responsive dark-themed HTML report generation with evidence traces and suggested interventions. |
 
@@ -78,7 +77,7 @@ The Python analyzer parses valid Python files into abstract syntax trees without
 * **Functions (`ast.FunctionDef`, `ast.AsyncFunctionDef`)**: Reconstructs canonical signatures including positional args, keyword-only args, variadic `*args`/`**kwargs`, and return annotations.
 * **Classes & Models (`ast.ClassDef`)**: Extracts type-annotated attributes (`ast.AnnAssign`) and standard assignments (`ast.Assign`).
 * **Route Decorators (`@app.get`, `@app.post`, etc.)**: Extracts HTTP methods and endpoint paths.
-* **Response Keys**: Scans return values and constant string literals for dictionary keys.
+* **Response Keys**: Extracts literal dictionary keys only from return expressions; unrelated strings are excluded.
 
 ### JavaScript / TypeScript Pattern Extraction
 The JS analyzer scans source files for contract touchpoints:
@@ -105,5 +104,5 @@ Future Branch is intentionally focused and offline. The current analyzer has spe
 
 1. **JavaScript/TypeScript parsing**: Uses regex matching rather than a full TypeScript compiler/AST. Complex destructuring patterns (`const { a, b: c } = await res.json()`) or type definitions are not yet fully introspected.
 2. **Python Schema Frameworks**: Introspects standard dataclasses and class attributes; explicit Pydantic v2 `BaseModel` field validators, `TypedDict`, and SQLAlchemy column definitions are planned enhancements.
-3. **Sequential Merge Interruption**: Rehearsal stops on the first Git textual conflict; subsequent branches are not analyzed until merge markers are resolved.
+3. **Conflicted Candidates**: Rehearsal stops candidate construction at the first textual conflict. It preserves the conflict and marks merge-dependent semantic coverage incomplete instead of selecting a synthetic resolution.
 4. **Dynamic Runtime Evaluation**: Contracts constructed entirely dynamically at runtime (e.g., dynamic `setattr` or dictionary unpacking) cannot be verified statically.
