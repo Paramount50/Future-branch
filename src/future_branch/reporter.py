@@ -1,4 +1,5 @@
 """Self-contained, ultra-clean technical dark HTML incident reports styled with pure monospaced aesthetic."""
+
 from __future__ import annotations
 
 import html
@@ -448,44 +449,50 @@ h1 {
 
 def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal") -> str:
     conflicts = result.get("conflicts", [])
+    incomplete_reasons = result.get("incomplete_reasons", [])
     branches = result.get("branches", [])
     status = str(result.get("status", "error")).lower()
-    is_clean = len(conflicts) == 0 and status != "error"
+    is_clean = len(conflicts) == 0 and status == "clean"
 
     cards: list[str] = []
     for item in conflicts:
         evidence_items = item.get("evidence", [])
         evidence_html = "".join(f"<li>{html.escape(str(x))}</li>" for x in evidence_items)
         owners = " ".join(
-            f"<span class='terminal-tab active'>{html.escape(str(x))}</span>"
-            for x in item.get("branches", [])
+            f"<span class='terminal-tab active'>{html.escape(str(x))}</span>" for x in item.get("branches", [])
         )
 
-        # Deterministic root cause from analyzer data
         owner_changed = item.get("owner_changed", "")
         owner_consumer = item.get("owner_consumer", "")
         description = item.get("description", "Contract conflict detected.")
-        root_cause = f"{description} Branch <strong>{html.escape(owner_changed)}</strong> modified the contract, but branch <strong>{html.escape(owner_consumer)}</strong> still depends on the original."
+        root_cause = (
+            f"{description} Branch <strong>{html.escape(owner_changed)}</strong> modified the contract, "
+            f"but branch <strong>{html.escape(owner_consumer)}</strong> still depends on the original."
+        )
 
         branch_a_label = html.escape(owner_changed) if owner_changed else "Branch A"
         branch_b_label = html.escape(owner_consumer) if owner_consumer else "Branch B"
 
-        evidence_section = f"""
+        evidence_section = (
+            f"""
           <div class="evidence">
             <div class="evidence-label">Evidence Trace</div>
             <ul>{evidence_html}</ul>
           </div>
-        """ if evidence_items else ""
+        """
+            if evidence_items
+            else ""
+        )
 
         cards.append(f"""
         <div class="incident-block">
           <div class="incident-top">
-            <span class="incident-kind">{html.escape(str(item.get('kind', 'semantic')))}</span>
+            <span class="incident-kind">{html.escape(str(item.get("kind", "semantic")))}</span>
             <div class="terminal-tabs">{owners}</div>
           </div>
           
-          <h2 class="incident-title">{html.escape(str(item.get('description', 'Conflict detected')))}</h2>
-          <div class="incident-file">FILE: {html.escape(str(item.get('path', '')))}</div>
+          <h2 class="incident-title">{html.escape(str(item.get("description", "Conflict detected")))}</h2>
+          <div class="incident-file">FILE: {html.escape(str(item.get("path", "")))}</div>
           
           <div class="diff-grid">
             <div class="diff-box changed">
@@ -493,7 +500,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
                 <span>Changed contract</span>
                 <span>{branch_a_label}</span>
               </div>
-              <pre class="diff-code">{html.escape(str(item.get('changed_code', 'No code excerpt.')))}</pre>
+              <pre class="diff-code">{html.escape(str(item.get("changed_code", "No code excerpt.")))}</pre>
             </div>
             
             <div class="diff-box expected">
@@ -501,7 +508,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
                 <span>Expected by consumer</span>
                 <span>{branch_b_label}</span>
               </div>
-              <pre class="diff-code">{html.escape(str(item.get('expected_code', 'No code excerpt.')))}</pre>
+              <pre class="diff-code">{html.escape(str(item.get("expected_code", "No code excerpt.")))}</pre>
             </div>
           </div>
 
@@ -513,26 +520,46 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
           {evidence_section}
 
           <div class="action-box">
-            <div class="action-label">&gt; Recommended Intervention (ao send)</div>
-            <div class="action-desc">{html.escape(str(item.get('suggested_fix', 'Resolve the contract mismatch.')))}</div>
+            <div class="action-label">&gt; Recommended Intervention</div>
+            <div class="action-desc">{html.escape(str(item.get("suggested_fix", "Resolve the contract mismatch.")))}</div>
           </div>
         </div>
         """)
 
-    body = "".join(cards) if cards else """
+    if cards:
+        body = "".join(cards)
+    elif status == "incomplete":
+        reasons = "".join(f"<li>{html.escape(str(reason))}</li>" for reason in incomplete_reasons)
+        body = f"""
+    <div class="incident-block">
+      <div class="incident-kind">coverage</div>
+      <h2 class="incident-title">Analysis incomplete</h2>
+      <div class="evidence"><ul>{reasons}</ul></div>
+    </div>
+    """
+    else:
+        body = """
     <div class="clean-block">
       <div class="clean-title">Rehearsal passed</div>
       <div class="clean-desc">No merge conflicts or contract breaks detected across active branches.</div>
     </div>
     """
+    if incomplete_reasons and status != "incomplete":
+        reasons = "".join(f"<li>{html.escape(str(reason))}</li>" for reason in incomplete_reasons)
+        body += f"""
+    <div class="incident-block">
+      <div class="incident-kind">coverage</div>
+      <h2 class="incident-title">Semantic analysis incomplete</h2>
+      <div class="evidence"><ul>{reasons}</ul></div>
+    </div>
+    """
 
     status_class = "clean" if is_clean else "error"
-    status_label = "REHEARSAL CLEAN" if is_clean else "CONFLICT DETECTED"
-
-    branch_tabs = " ".join(
-        f"<span class='terminal-tab'>{html.escape(str(b))}</span>"
-        for b in branches
+    status_label = (
+        "REHEARSAL CLEAN" if is_clean else "ANALYSIS INCOMPLETE" if status == "incomplete" else "CONFLICT DETECTED"
     )
+
+    branch_tabs = " ".join(f"<span class='terminal-tab'>{html.escape(str(b))}</span>" for b in branches)
 
     return f"""<!doctype html>
 <html lang="en">
@@ -547,7 +574,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
     <div class="header-wrapper">
       <div>
         <div class="eyebrow">
-          <span>AO / PRE-MERGE REHEARSAL GATE</span>
+          <span>PRE-MERGE REHEARSAL GATE</span>
         </div>
         <h1>{html.escape(title)}</h1>
         <p class="tagline">Individually correct. <strong>Collectively broken.</strong> Caught before merge.</p>
@@ -564,7 +591,7 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
     <div class="stats-grid">
       <div class="stat-card">
         <span class="stat-label">Status</span>
-        <div class="stat-value {'clean-text' if is_clean else 'error-text'}">
+        <div class="stat-value {"clean-text" if is_clean else "error-text"}">
           {html.escape(status.upper())}
         </div>
       </div>
@@ -572,13 +599,13 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
       <div class="stat-card">
         <span class="stat-label">Base branch</span>
         <div class="stat-value">
-          {html.escape(str(result.get('base', 'main')))}
+          {html.escape(str(result.get("base", "main")))}
         </div>
       </div>
       
       <div class="stat-card">
         <span class="stat-label">Conflicts</span>
-        <div class="stat-value {'clean-text' if is_clean else 'error-text'}">
+        <div class="stat-value {"clean-text" if is_clean else "error-text"}">
           {len(conflicts)}
         </div>
       </div>
@@ -593,9 +620,9 @@ def render_report(result: dict[str, Any], title: str = "Future Branch Rehearsal"
       </div>
       <div class="terminal-command">
         <span class="terminal-prompt">&gt;</span>
-        <span>future-branch rehearse {' '.join(branches)} --base {html.escape(str(result.get('base', 'main')))}</span>
+        <span>future-branch {" ".join(html.escape(str(b)) for b in branches)} --base {html.escape(str(result.get("base", "main")))}</span>
       </div>
-      <div class="timestamp">Generated {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}</div>
+      <div class="timestamp">Generated {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")}</div>
     </div>
 
     {body}

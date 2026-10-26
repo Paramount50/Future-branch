@@ -22,4 +22,4 @@ git add frontend/api.js && git commit -qm 'agent-b: display billing credits'
 git checkout -q main
 cd - >/dev/null
 echo "Demo repository created at: $repo"
-echo "Run: python rehearse.py \"$repo\" agent-a-backend agent-b-frontend"
+echo "Run: future-branch \"$repo\" agent-a-backend agent-b-frontend"
