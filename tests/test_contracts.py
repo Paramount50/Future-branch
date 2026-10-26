@@ -152,6 +152,7 @@ export async function load() {
     assert consumer.snapshot_id == "candidate-4"
     assert {field.name for field in consumer.response_fields} == {"credits"}
     assert consumer.response_fields[0].source_line == 4
+    assert consumer.response_evidence_complete is True
 
 
 def test_javascript_fetch_method_is_extracted():
@@ -196,6 +197,7 @@ def test_dynamic_javascript_body_is_not_marked_complete():
     )
 
     assert consumers[0].complete_request_locations == ("query",)
+    assert consumers[0].response_evidence_complete is True
     assert coverage.status == "partial"
 
 
@@ -204,6 +206,18 @@ def test_javascript_template_literal_target_is_extracted():
 
     assert coverage.status == "supported"
     assert consumers[0].identity == ("GET", "/users/${userId}")
+
+
+def test_multiple_fetches_do_not_claim_complete_response_linkage():
+    consumers, coverage = extract_javascript_consumers(
+        'fetch("/profile"); fetch("/billing"); return data.credits;',
+        "client.ts",
+        "candidate-multiple-fetches",
+    )
+
+    assert coverage.status == "partial"
+    assert len(consumers) == 2
+    assert all(consumer.response_evidence_complete is False for consumer in consumers)
 
 
 def test_inventory_serializes_versioned_records():

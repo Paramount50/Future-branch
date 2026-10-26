@@ -181,8 +181,8 @@ def test_deleted_provider_is_not_reported_clean(tmp_path: Path):
 
     result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
 
-    assert result["status"] == "conflicts"
-    assert "credits" in result["conflicts"][0]["description"]
+    assert result["status"] == "incomplete"
+    assert result["conflicts"] == []
 
 
 def test_unchanged_consumers_are_checked(tmp_path: Path):
@@ -199,8 +199,8 @@ def test_unchanged_consumers_are_checked(tmp_path: Path):
 
     result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
 
-    assert result["status"] == "conflicts"
-    assert result["conflicts"][0]["owner_consumer"] == "base"
+    assert result["status"] == "incomplete"
+    assert result["conflicts"] == []
 
 
 def test_logs_are_not_response_fields(tmp_path: Path):
@@ -590,3 +590,32 @@ def test_prefixed_fastapi_router_matches_consumer(tmp_path: Path):
 
     assert result["status"] == "conflicts"
     assert [conflict["code"] for conflict in result["conflicts"]] == ["ERR_FIELD_REMOVED"]
+
+
+def test_ambiguous_multi_fetch_fields_do_not_create_false_conflict(tmp_path: Path):
+    repo = _candidate_repo(
+        tmp_path / "ambiguous-multi-fetch",
+        {
+            "api.py": (
+                '@app.get("/profile")\ndef profile():\n    return {"credits": 1}\n\n'
+                '@app.get("/billing")\ndef billing():\n    return {"credits": 2}\n'
+            ),
+            "client.js": (
+                'export async function load() { await fetch("/profile"); '
+                'const data = await (await fetch("/billing")).json(); return data.credits; }\n'
+            ),
+            "README.md": "base\n",
+        },
+        {
+            "api.py": (
+                '@app.get("/profile")\ndef profile():\n    return {"balance": 1}\n\n'
+                '@app.get("/billing")\ndef billing():\n    return {"credits": 2}\n'
+            )
+        },
+        {"README.md": "changed\n"},
+    )
+
+    result = analyze_repository(repo, "main", ["branch-a", "branch-b"])
+
+    assert result["status"] == "incomplete"
+    assert result["conflicts"] == []

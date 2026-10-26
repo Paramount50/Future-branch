@@ -61,6 +61,7 @@ class ConsumerContract:
     snapshot_id: str
     confidence: float
     complete_request_locations: tuple[str, ...] = ()
+    response_evidence_complete: bool = False
     extractor: str = "javascript-pattern-v1"
     ucm_version: str = UCM_VERSION
 
@@ -511,6 +512,7 @@ def extract_javascript_consumers(
             snapshot_id=snapshot_id,
             confidence=0.7 if len(calls) == 1 else 0.45,
             complete_request_locations=complete_locations,
+            response_evidence_complete=len(calls) == 1,
         )
         for target, method, offset, request_fields, complete_locations in calls
     ]
@@ -525,6 +527,7 @@ def extract_javascript_consumers(
                 source=SourceLocation(path=path, line=first_field),
                 snapshot_id=snapshot_id,
                 confidence=0.35,
+                response_evidence_complete=False,
             )
         )
     has_dynamic_body = any("body" not in complete_locations for *_, complete_locations in calls)

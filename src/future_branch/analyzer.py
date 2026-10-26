@@ -354,6 +354,8 @@ class BranchAnalyzer:
                 )
                 removed = set(old_fields) - set(new_fields)
                 for consumer in matching_consumers:
+                    if not consumer.response_evidence_complete:
+                        continue
                     used = {field.name for field in consumer.response_fields}
                     stale = sorted(removed & used)
                     if not stale:
@@ -390,6 +392,8 @@ class BranchAnalyzer:
 
                 if new_endpoint is not None:
                     for consumer in matching_consumers:
+                        if not consumer.response_evidence_complete:
+                            continue
                         used = {field.name for field in consumer.response_fields}
                         consumer_path = consumer.source.path
                         consumer_owners = [
